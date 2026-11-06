@@ -1,7 +1,7 @@
 "use client";
 
 import { Crosshair, Scissors, SlidersHorizontal } from "lucide-react";
-import { TILE_SIZES, type PackSettings, type TileSize } from "@/lib/types";
+import { ORIGINAL_TILE_SIZE, TILE_SIZES, type PackSettings, type TileSize } from "@/lib/types";
 
 type Props = {
   settings: PackSettings;
@@ -18,7 +18,7 @@ export function ControlPanel({ settings, onChange }: Props) {
 
       <fieldset>
         <legend className="mb-2 text-xs font-medium tracking-wide text-[#9aa3b5] uppercase">타일 규격</legend>
-        <div className="grid grid-cols-4 gap-1.5" role="radiogroup" aria-label="타일 규격">
+        <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="타일 규격">
           {TILE_SIZES.map((size) => {
             const selected = settings.tileSize === size;
             return (
@@ -28,7 +28,7 @@ export function ControlPanel({ settings, onChange }: Props) {
                 role="radio"
                 aria-checked={selected}
                 onClick={() => onChange({ ...settings, tileSize: size satisfies TileSize })}
-                className={`h-10 rounded-lg border text-sm font-medium tabular-nums transition ${
+                className={`h-12 rounded-lg border text-sm font-medium tabular-nums transition ${
                   selected
                     ? "border-[#e39b4b] bg-[#e39b4b]/15 text-[#f3d2a8]"
                     : "border-[#2a3140] bg-[#0d1016] text-[#c5cbd6] hover:border-[#465066]"
@@ -38,8 +38,45 @@ export function ControlPanel({ settings, onChange }: Props) {
               </button>
             );
           })}
+          <button
+            type="button"
+            role="radio"
+            aria-checked={settings.tileSize === ORIGINAL_TILE_SIZE}
+            aria-label="Original (비율 유지)"
+            onClick={() => onChange({ ...settings, tileSize: ORIGINAL_TILE_SIZE })}
+            className={`h-12 rounded-lg border text-sm font-medium transition ${
+              settings.tileSize === ORIGINAL_TILE_SIZE
+                ? "border-[#e39b4b] bg-[#e39b4b]/15 text-[#f3d2a8]"
+                : "border-[#2a3140] bg-[#0d1016] text-[#c5cbd6] hover:border-[#465066]"
+            }`}
+          >
+            <span className="block leading-tight">Original</span>
+            <span className="block text-[10px] font-normal tracking-normal opacity-80">비율 유지</span>
+          </button>
         </div>
+        {settings.tileSize === ORIGINAL_TILE_SIZE ? (
+          <p className="mt-2 text-xs leading-5 text-[#6f788a]">
+            {settings.trimAlpha
+              ? "정사각으로 늘리지 않습니다. 알파 트림만 한 뒤 원본 해상도 비율 그대로 패킹합니다."
+              : "정사각으로 늘리지 않습니다. 트림이 꺼져 있어 원본 캔버스 비율 그대로 패킹합니다."}
+          </p>
+        ) : null}
       </fieldset>
+
+      <label className="mt-4 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-[#2a3140] bg-[#0d1016] px-3 py-3">
+        <span>
+          <span className="block text-sm font-medium text-[#ece7df]">Force Power of Two (GPU 호환)</span>
+          <span className="mt-0.5 block text-xs leading-5 text-[#9aa3b5]">
+            potpack 결과의 가로·세로를 내용이 들어가는 가장 가까운 2의 거듭제곱 캔버스로 확장합니다.
+          </span>
+        </span>
+        <input
+          type="checkbox"
+          checked={settings.forcePowerOfTwo}
+          onChange={(event) => onChange({ ...settings, forcePowerOfTwo: event.target.checked })}
+          className="size-4 shrink-0 accent-[#e39b4b]"
+        />
+      </label>
 
       <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-[#2a3140] bg-[#0d1016] px-3 py-3">
         <div className="flex items-start gap-2">

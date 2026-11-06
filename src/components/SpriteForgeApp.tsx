@@ -1,11 +1,13 @@
 "use client";
 
-import { Anvil, ShieldCheck, X } from "lucide-react";
+import { Anvil, ChevronRight, ShieldCheck, X } from "lucide-react";
 import { AtlasPreview } from "@/components/AtlasPreview";
 import { ControlPanel } from "@/components/ControlPanel";
 import { DropZone } from "@/components/DropZone";
 import { SpriteGrid } from "@/components/SpriteGrid";
 import { useSpriteForge } from "@/hooks/useSpriteForge";
+
+const STEPS = ["Drop Sprites", "Auto Trim & Grid", "Export Unity Pack (.zip)"] as const;
 
 export function SpriteForgeApp() {
   const forge = useSpriteForge();
@@ -19,12 +21,25 @@ export function SpriteForgeApp() {
               <Anvil className="size-5" aria-hidden />
             </span>
             <div>
-              <h1 className="text-xl font-semibold tracking-tight text-[#ece7df] sm:text-2xl">
-                SpriteForge - AI Asset Normalizer & Atlas Packer
-              </h1>
+              <h1 className="text-2xl font-semibold tracking-tight text-[#ece7df] sm:text-3xl">SpriteForge</h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-[#9aa3b5]">
-                크기와 여백이 제각각인 PNG를 투명 영역 기준으로 잘라 정사각 타일 한가운데 맞춘 뒤, 하나의 스프라이트 시트로 패킹합니다.
+                Turn messy AI pixel art into clean, Unity-ready sprite atlases in seconds.
               </p>
+              <ol className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center" aria-label="Workflow">
+                {STEPS.map((step, index) => (
+                  <li key={step} className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-2 rounded-full border border-[#6a5438] bg-[#23190f] px-3 py-1.5 text-xs font-medium text-[#f3d2a8]">
+                      <span className="flex size-5 items-center justify-center rounded-full bg-[#e39b4b] font-mono text-[11px] font-semibold text-[#1a1208]">
+                        {index + 1}
+                      </span>
+                      {step}
+                    </span>
+                    {index < STEPS.length - 1 ? (
+                      <ChevronRight className="size-4 shrink-0 text-[#6f788a]" aria-hidden />
+                    ) : null}
+                  </li>
+                ))}
+              </ol>
             </div>
           </div>
           <p className="inline-flex w-fit items-center gap-1.5 rounded-full border border-[#2a3140] bg-[#13171f] px-3 py-1.5 text-xs text-[#c5cbd6]">
