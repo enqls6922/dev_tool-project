@@ -2,6 +2,7 @@
 
 import { Anvil, ChevronRight, ShieldCheck } from "lucide-react";
 import { useRef, useState, type KeyboardEvent } from "react";
+import { MotionStabilizer } from "@/components/MotionStabilizer";
 import { PixelCleaner } from "@/components/PixelCleaner";
 import { RuleTileForge } from "@/components/RuleTileForge";
 import { SpritePackerPanel } from "@/components/SpritePackerPanel";
@@ -28,6 +29,13 @@ const TABS = [
     steps: ["Drop PNG", "Clean Alpha", "Save PNG"],
     summary: "반투명 고스트 픽셀을 지우고, 확대 체커보드에서 정리된 경계를 확인합니다.",
   },
+  {
+    id: "motion",
+    label: "🎬 Motion Stabilizer",
+    panel: "panel-motion",
+    steps: ["Drop Frames", "Stabilize", "Export Sheet"],
+    summary: "걷기 프레임의 발바닥을 한 기준선에 맞추고, 좌우 중심을 고정한 뒤 가로 스트립으로 내보냅니다.",
+  },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -38,6 +46,7 @@ export function SpriteForgeApp() {
     packer: null,
     ruletile: null,
     cleaner: null,
+    motion: null,
   });
   const active = TABS.find((item) => item.id === tab) ?? TABS[0];
 
@@ -127,6 +136,9 @@ export function SpriteForgeApp() {
         </div>
         <div role="tabpanel" id="panel-cleaner" aria-labelledby="tab-cleaner" hidden={tab !== "cleaner"}>
           <PixelCleaner />
+        </div>
+        <div role="tabpanel" id="panel-motion" aria-labelledby="tab-motion" hidden={tab !== "motion"}>
+          <MotionStabilizer active={tab === "motion"} />
         </div>
       </div>
     </div>
