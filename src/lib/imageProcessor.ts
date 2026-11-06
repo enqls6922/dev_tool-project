@@ -12,6 +12,10 @@ export const POT_EDGES = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192] as 
 
 const OPAQUE_ALPHA = 0;
 
+/** Inclusive alpha band treated as AI ghost / dot noise. 0 stays empty; 31 and above stay. */
+export const GHOST_ALPHA_MIN = 1;
+export const GHOST_ALPHA_MAX = 30;
+
 export type OpaqueBounds = {
   x: number;
   y: number;
@@ -100,6 +104,22 @@ export function findOpaqueBounds(
   };
 }
 
+/**
+ * Clear ambiguous semi-transparent noise in place.
+ * Alpha from 1 through 30 becomes 0. RGB is left unchanged, and alpha 0 / 31–255 stay.
+ * Returns how many texels were cleared.
+ */
+export function cleanGhostPixels(pixels: Uint8ClampedArray): number {
+  let cleared = 0;
+  for (let index = 3; index < pixels.length; index += 4) {
+    const alpha = pixels[index] ?? 0;
+    if (alpha < GHOST_ALPHA_MIN || alpha > GHOST_ALPHA_MAX) continue;
+    pixels[index] = 0;
+    cleared += 1;
+  }
+  return cleared;
+}
+
 function requireContext(
   canvas: HTMLCanvasElement,
   willReadFrequently = false,
@@ -109,6 +129,26 @@ function requireContext(
     throw new Error("캔버스 2D 컨텍스트를 만들 수 없습니다.");
   }
   return context;
+}
+
+export function drawImageToCanvas(image: CanvasImageSource, width: number, height: number): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, width);
+  canvas.height = Math.max(1, height);
+  const context = requireContext(canvas, true);
+  if (width > 0 && height > 0) {
+    context.drawImage(image, 0, 0, width, height);
+  }
+  return canvas;
+}
+
+/** Run `cleanGhostPixels` on a canvas and write the buffer back when anything changed. */
+export function cleanCanvasGhostPixels(canvas: HTMLCanvasElement): number {
+  const context = requireContext(canvas, true);
+  const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+  const cleared = cleanGhostPixels(imageData.data);
+  if (cleared > 0) context.putImageData(imageData, 0, 0);
+  return cleared;
 }
 
 export function loadImage(file: File): Promise<HTMLImageElement> {
@@ -128,17 +168,18 @@ export function loadImage(file: File): Promise<HTMLImageElement> {
   });
 }
 
-function rasterize(img: HTMLImageElement): { canvas: HTMLCanvasElement; bounds: OpaqueBounds | null } {
+function rasterize(
+  img: HTMLImageElement,
+  cleanGhosts = false,
+): { canvas: HTMLCanvasElement; bounds: OpaqueBounds | null } {
   const width = img.naturalWidth;
   const height = img.naturalHeight;
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, width);
-  canvas.height = Math.max(1, height);
+  const canvas = drawImageToCanvas(img, width, height);
   const context = requireContext(canvas, true);
-  if (width > 0 && height > 0) {
-    context.drawImage(img, 0, 0);
-  }
   const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+  if (cleanGhosts && cleanGhostPixels(imageData.data) > 0) {
+    context.putImageData(imageData, 0, 0);
+  }
   return {
     canvas,
     bounds: findOpaqueBounds(imageData.data, canvas.width, canvas.height),
@@ -224,7 +265,7 @@ export async function normalizeSprite(file: File, settings: PackSettings): Promi
     throw new Error(`한 변이 ${MAX_IMAGE_EDGE}px를 넘습니다.`);
   }
 
-  const surface = rasterize(image);
+  const surface = rasterize(image, settings.cleanGhostPixels);
   const sourceWidth = image.naturalWidth;
   const sourceHeight = image.naturalHeight;
   const tileSize = settings.tileSize;

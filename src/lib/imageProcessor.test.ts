@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   buildAtlasDocument,
   clampPadding,
+  cleanGhostPixels,
   findOpaqueBounds,
   generateUnityImporterScript,
   layoutFrames,
@@ -37,6 +38,31 @@ test("findOpaqueBounds ignores fully transparent pixels and keeps alpha 1", () =
 
 test("findOpaqueBounds returns null for an empty buffer", () => {
   assert.equal(findOpaqueBounds(new Uint8ClampedArray(32), 4, 2), null);
+});
+
+test("cleanGhostPixels clears alpha 1 through 30 and keeps rgb", () => {
+  const pixels = new Uint8ClampedArray([
+    1, 2, 3, 0,
+    4, 5, 6, 1,
+    7, 8, 9, 30,
+    10, 11, 12, 31,
+    13, 14, 15, 255,
+  ]);
+  assert.equal(cleanGhostPixels(pixels), 2);
+  assert.deepEqual(Array.from(pixels), [
+    1, 2, 3, 0,
+    4, 5, 6, 0,
+    7, 8, 9, 0,
+    10, 11, 12, 31,
+    13, 14, 15, 255,
+  ]);
+});
+
+test("cleanGhostPixels ignores a short trailing channel", () => {
+  const pixels = new Uint8ClampedArray([9, 9, 9, 12, 1, 2]);
+  assert.equal(cleanGhostPixels(pixels), 1);
+  assert.equal(pixels[3], 0);
+  assert.equal(pixels[4], 1);
 });
 
 test("sprite names stay readable and unique", () => {
