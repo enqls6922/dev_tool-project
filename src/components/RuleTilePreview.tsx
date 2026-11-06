@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, LoaderCircle } from "lucide-react";
+import { ChevronDown, Download, LoaderCircle } from "lucide-react";
 import type { SheetCell } from "@/lib/ruleTile";
 
 type Props = {
@@ -126,17 +126,34 @@ export function RuleTilePreview({
         RuleTilePack.zip 다운로드
       </button>
 
-      <details className="mt-3 rounded-xl border border-[#2a3140] bg-[#0d1016] px-3 py-2 text-xs leading-5 text-[#9aa3b5]">
-        <summary className="cursor-pointer text-[#c5cbd6]">Unity에서 Rule Tile 만드는 법</summary>
-        <ol className="mt-2 list-decimal space-y-1 pl-4">
-          <li>RuleTilePack.zip을 풀어 Assets 폴더에 넣습니다. Editor/RuleTileBuilder.cs 가 함께 들어 있습니다.</li>
-          <li>Package Manager에서 2D Tilemap Extras를 설치합니다.</li>
-          <li>Tileset.png를 선택하고 Tools → SpriteForge → Build Rule Tile 을 실행합니다. 텍스처 우클릭의 SpriteForge → Build Rule Tile 도 같습니다.</li>
-          <li>같은 폴더에 RuleTile.asset이 생깁니다. Tile Palette에 넣어 칠하면 됩니다.</li>
+      <details
+        open
+        className="group mt-3 overflow-hidden rounded-xl border border-[#6a5438] bg-[#1c160f] text-xs leading-5 text-[#c5cbd6]"
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-3 text-sm font-medium text-[#f3d2a8] [&::-webkit-details-marker]:hidden">
+          <span>📌 유니티에 1초 만에 적용하는 법</span>
+          <ChevronDown className="size-4 shrink-0 text-[#e39b4b] transition group-open:rotate-180" aria-hidden />
+        </summary>
+        <ol className="space-y-2.5 border-t border-[#6a5438]/80 px-3 py-3">
+          <li className="flex gap-2.5">
+            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[#e39b4b] font-mono text-[11px] font-semibold text-[#1a1208]">
+              1
+            </span>
+            <span>다운로드받은 파일들을 유니티 Assets 폴더(권장: Assets/Editor)에 넣기</span>
+          </li>
+          <li className="flex gap-2.5">
+            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[#e39b4b] font-mono text-[11px] font-semibold text-[#1a1208]">
+              2
+            </span>
+            <span>유니티에서 Tileset.png를 우클릭하고 [SpriteForge &gt; Build Rule Tile] 클릭</span>
+          </li>
+          <li className="flex gap-2.5">
+            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[#e39b4b] font-mono text-[11px] font-semibold text-[#1a1208]">
+              3
+            </span>
+            <span>생성된 완성형 RuleTile(.asset)을 타일 팔레트에 넣고 브러시로 칠하기!</span>
+          </li>
         </ol>
-        <p className="mt-2">
-          임포터는 Multiple, Point, Uncompressed로 맞춘 뒤 tileSize 칸으로 자릅니다. 룰은 RuleData.json 순서대로 m_TilingRules에 들어갑니다.
-        </p>
       </details>
     </section>
   );
