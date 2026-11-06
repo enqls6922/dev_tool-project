@@ -5,9 +5,17 @@ import { useId, useState, type DragEvent } from "react";
 
 type Props = {
   onFiles: (files: File[]) => void;
+  multiple?: boolean;
+  title?: string;
+  hint?: string;
 };
 
-export function DropZone({ onFiles }: Props) {
+export function DropZone({
+  onFiles,
+  multiple = true,
+  title = "PNG를 떨어뜨리거나 클릭해서 선택",
+  hint = "여러 장을 한 번에 올릴 수 있습니다. 디코딩, 트림, 패킹은 이 브라우저 캔버스에서만 돌아갑니다.",
+}: Props) {
   const inputId = useId();
   const [active, setActive] = useState(false);
 
@@ -49,15 +57,13 @@ export function DropZone({ onFiles }: Props) {
       <span className="mb-3 flex size-11 items-center justify-center rounded-xl border border-[#2a3140] bg-[#0d1016] text-[#e39b4b]">
         <ImagePlus className="size-5" aria-hidden />
       </span>
-      <span className="text-sm font-medium text-[#ece7df]">PNG를 떨어뜨리거나 클릭해서 선택</span>
-      <span className="mt-1 max-w-sm text-xs leading-5 text-[#9aa3b5]">
-        여러 장을 한 번에 올릴 수 있습니다. 디코딩, 트림, 패킹은 이 브라우저 캔버스에서만 돌아갑니다.
-      </span>
+      <span className="text-sm font-medium text-[#ece7df]">{title}</span>
+      <span className="mt-1 max-w-sm text-xs leading-5 text-[#9aa3b5]">{hint}</span>
       <input
         id={inputId}
         type="file"
         accept="image/png,.png"
-        multiple
+        multiple={multiple}
         className="sr-only"
         onChange={(event) => {
           takeFiles(event.target.files);

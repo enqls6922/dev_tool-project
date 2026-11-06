@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "SpriteForge",
-  description: "Turn messy AI pixel art into clean, Unity-ready sprite atlases in seconds.",
+  description: "Pack AI sprites into Unity atlases, or turn a PixelLab tileset into a Rule Tile.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
