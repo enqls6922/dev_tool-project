@@ -4,6 +4,12 @@ import type { AtlasDocument, PackResult, PackSettings, SpriteRect } from "./type
 export const MAX_IMAGE_EDGE = 8192;
 export const MAX_ATLAS_EDGE = 8192;
 
+/**
+ * GPU-friendly atlas edges. 16 through 2048 are the pixel-art defaults; 4096 and
+ * 8192 continue the same sequence so a large sheet still grows instead of clipping.
+ */
+export const POT_EDGES = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192] as const;
+
 const OPAQUE_ALPHA = 0;
 
 export type OpaqueBounds = {
@@ -16,6 +22,18 @@ export type OpaqueBounds = {
 export function clampPadding(padding: number): number {
   if (!Number.isFinite(padding)) return 1;
   return Math.min(4, Math.max(0, Math.round(padding)));
+}
+
+/** Smallest power-of-two edge in `POT_EDGES` that can hold `edge` pixels. */
+export function nextPowerOfTwoEdge(edge: number): number {
+  if (!Number.isFinite(edge) || edge <= 0) return 0;
+  const needed = Math.ceil(edge);
+  for (const size of POT_EDGES) {
+    if (needed <= size) return size;
+  }
+  throw new Error(
+    `아틀라스 한 변 ${needed}px는 2의 거듭제곱 한도 ${POT_EDGES[POT_EDGES.length - 1]}px를 넘습니다.`,
+  );
 }
 
 export function isPngFile(file: File): boolean {
@@ -209,10 +227,12 @@ export async function normalizeSprite(file: File, settings: PackSettings): Promi
   const surface = rasterize(image);
   const sourceWidth = image.naturalWidth;
   const sourceHeight = image.naturalHeight;
+  const tileSize = settings.tileSize;
   if (!surface.bounds) {
     const blank = document.createElement("canvas");
-    blank.width = settings.tileSize;
-    blank.height = settings.tileSize;
+    const blankEdge = tileSize === "original" ? 1 : tileSize;
+    blank.width = blankEdge;
+    blank.height = blankEdge;
     return {
       canvas: blank,
       empty: true,
@@ -223,38 +243,54 @@ export async function normalizeSprite(file: File, settings: PackSettings): Promi
   }
 
   const content = settings.trimAlpha ? cropCanvas(surface.canvas, surface.bounds) : surface.canvas;
-  const fitted = fitToSquare(content, settings.tileSize, { smoothing: !settings.pixelated });
+  const normalized =
+    tileSize === "original"
+      ? content
+      : fitToSquare(content, tileSize, { smoothing: !settings.pixelated });
   return {
-    canvas: fitted,
+    canvas: normalized,
     empty: false,
-    previewUrl: fitted.toDataURL("image/png"),
+    previewUrl: normalized.toDataURL("image/png"),
     sourceWidth,
     sourceHeight,
   };
 }
 
-export function layoutSprites<T extends { name: string }>(
+type FrameSize = {
+  width: number;
+  height: number;
+};
+
+/**
+ * Pack rectangles with potpack. Each box reserves `padding` after the sprite so
+ * neighbors stay apart, then the atlas is cropped to the last opaque edge.
+ * `forcePowerOfTwo` grows that tight canvas; it does not move the sprites.
+ */
+export function layoutFrames<T extends FrameSize & { name: string }>(
   items: readonly T[],
-  tileSize: number,
   padding: number,
+  forcePowerOfTwo = false,
 ): {
   width: number;
   height: number;
   fill: number;
   sprites: Array<T & SpriteRect>;
 } {
-  if (!Number.isInteger(tileSize) || tileSize <= 0) {
-    throw new Error("타일 크기는 양의 정수여야 합니다.");
-  }
   if (items.length === 0) {
     return { width: 0, height: 0, fill: 0, sprites: [] };
+  }
+
+  for (const item of items) {
+    if (!Number.isInteger(item.width) || !Number.isInteger(item.height) || item.width <= 0 || item.height <= 0) {
+      throw new Error("스프라이트 크기는 양의 정수여야 합니다.");
+    }
   }
 
   const gap = clampPadding(padding);
   const boxes: Array<PotpackBox & { item: T }> = items.map((item) => ({
     item,
-    w: tileSize + gap,
-    h: tileSize + gap,
+    w: item.width + gap,
+    h: item.height + gap,
   }));
   const stats = potpack(boxes);
   if (stats.w <= 0 || stats.h <= 0) {
@@ -266,32 +302,55 @@ export function layoutSprites<T extends { name: string }>(
     name: box.item.name,
     x: box.x ?? 0,
     y: box.y ?? 0,
-    width: tileSize,
-    height: tileSize,
+    width: box.item.width,
+    height: box.item.height,
   }));
-  const width = sprites.reduce((max, sprite) => Math.max(max, sprite.x + sprite.width), 0);
-  const height = sprites.reduce((max, sprite) => Math.max(max, sprite.y + sprite.height), 0);
-  const fill = (sprites.length * tileSize * tileSize) / (width * height);
+  const contentWidth = sprites.reduce((max, sprite) => Math.max(max, sprite.x + sprite.width), 0);
+  const contentHeight = sprites.reduce((max, sprite) => Math.max(max, sprite.y + sprite.height), 0);
+  const width = forcePowerOfTwo ? nextPowerOfTwoEdge(contentWidth) : contentWidth;
+  const height = forcePowerOfTwo ? nextPowerOfTwoEdge(contentHeight) : contentHeight;
+  const area = sprites.reduce((sum, sprite) => sum + sprite.width * sprite.height, 0);
+  const fill = width > 0 && height > 0 ? area / (width * height) : 0;
   return { width, height, fill, sprites };
 }
 
-/** Pack already-squared canvases into one atlas. Padding sits between tiles, not after the last edge. */
+export function layoutSprites<T extends { name: string }>(
+  items: readonly T[],
+  tileSize: number,
+  padding: number,
+  forcePowerOfTwo = false,
+): {
+  width: number;
+  height: number;
+  fill: number;
+  sprites: Array<T & { width: number; height: number } & SpriteRect>;
+} {
+  if (!Number.isInteger(tileSize) || tileSize <= 0) {
+    throw new Error("타일 크기는 양의 정수여야 합니다.");
+  }
+  return layoutFrames(
+    items.map((item) => ({ ...item, width: tileSize, height: tileSize })),
+    padding,
+    forcePowerOfTwo,
+  );
+}
+
+/** Pack trimmed canvases into one atlas. Padding sits between sprites, not after the last edge. */
 export function packSprites(
   processedCanvases: { name: string; canvas: HTMLCanvasElement }[],
   padding: number,
+  options?: { forcePowerOfTwo?: boolean },
 ): PackResult {
   if (processedCanvases.length === 0) {
     throw new Error("패킹할 스프라이트가 없습니다.");
   }
 
-  const tileSize = processedCanvases[0].canvas.width;
-  for (const sprite of processedCanvases) {
-    if (sprite.canvas.width !== tileSize || sprite.canvas.height !== tileSize) {
-      throw new Error("모든 타일은 같은 정사각형 크기여야 합니다.");
-    }
-  }
-
-  const layout = layoutSprites(processedCanvases, tileSize, padding);
+  const frames = processedCanvases.map((sprite) => ({
+    ...sprite,
+    width: sprite.canvas.width,
+    height: sprite.canvas.height,
+  }));
+  const layout = layoutFrames(frames, padding, options?.forcePowerOfTwo ?? false);
   if (layout.width > MAX_ATLAS_EDGE || layout.height > MAX_ATLAS_EDGE) {
     throw new Error(
       `아틀라스가 ${layout.width}×${layout.height}px라서 브라우저 한도 ${MAX_ATLAS_EDGE}px를 넘습니다. 타일을 줄이거나 이미지를 덜어내세요.`,
@@ -329,10 +388,11 @@ export function buildAtlasDocument(pack: PackResult, settings: PackSettings): At
     image: "Atlas.png",
     width: pack.width,
     height: pack.height,
-    tileSize: settings.tileSize,
+    tileSize: settings.tileSize === "original" ? 0 : settings.tileSize,
     padding: clampPadding(settings.padding),
     trimAlpha: settings.trimAlpha,
     pixelated: settings.pixelated,
+    forcePowerOfTwo: settings.forcePowerOfTwo,
     sprites: pack.sprites.map(({ name, x, y, width, height }) => ({
       name,
       x,
@@ -392,34 +452,34 @@ public static class SpriteSheetImporter
         var jsonPath = Path.Combine(directory ?? string.Empty, "Atlas.json");
         if (!File.Exists(jsonPath)) return false;
 
-        var atlas = JsonUtility.FromJson<AtlasFile>(File.ReadAllText(jsonPath));
-        if (atlas == null || atlas.sprites == null || atlas.sprites.Length == 0) return false;
+        var atlasData = JsonUtility.FromJson<AtlasFile>(File.ReadAllText(jsonPath));
+        if (atlasData == null || atlasData.sprites == null || atlasData.sprites.Length == 0) return false;
 
-        var importer = AssetImporter.GetAtPath(texturePath) as TextureImporter;
-        if (importer == null) return false;
+        var textureImporter = AssetImporter.GetAtPath(texturePath) as TextureImporter;
+        if (textureImporter == null) return false;
 
-        importer.textureType = TextureImporterType.Sprite;
-        importer.spriteImportMode = SpriteImportMode.Multiple;
-        importer.alphaIsTransparency = true;
-        importer.mipmapEnabled = false;
-        importer.npotScale = TextureImporterNPOTScale.None;
-        importer.textureCompression = TextureImporterCompression.Uncompressed;
-        importer.filterMode = atlas.pixelated ? FilterMode.Point : FilterMode.Bilinear;
-        importer.spritePixelsPerUnit = atlas.tileSize > 0 ? atlas.tileSize : 100f;
-        importer.maxTextureSize = 8192;
-        importer.SaveAndReimport();
+        textureImporter.textureType = TextureImporterType.Sprite;
+        textureImporter.spriteImportMode = SpriteImportMode.Multiple;
+        textureImporter.alphaIsTransparency = true;
+        textureImporter.npotScale = TextureImporterNPOTScale.None;
+        textureImporter.maxTextureSize = 8192;
+        textureImporter.spritePixelsPerUnit = atlasData.tileSize > 0 ? atlasData.tileSize : 32;
+        textureImporter.filterMode = FilterMode.Point;
+        textureImporter.textureCompression = TextureImporterCompression.Uncompressed;
+        textureImporter.mipmapEnabled = false;
+        textureImporter.SaveAndReimport();
 
         var factories = new SpriteDataProviderFactories();
         factories.Init();
-        var dataProvider = factories.GetSpriteEditorDataProviderFromObject(importer);
+        var dataProvider = factories.GetSpriteEditorDataProviderFromObject(textureImporter);
         dataProvider.InitSpriteEditorDataProvider();
 
-        var rects = new SpriteRect[atlas.sprites.Length];
-        var pairs = new SpriteNameFileIdPair[atlas.sprites.Length];
-        for (var i = 0; i < atlas.sprites.Length; i++)
+        var rects = new SpriteRect[atlasData.sprites.Length];
+        var pairs = new SpriteNameFileIdPair[atlasData.sprites.Length];
+        for (var i = 0; i < atlasData.sprites.Length; i++)
         {
-            var sprite = atlas.sprites[i];
-            var unityY = atlas.height - sprite.y - sprite.height;
+            var sprite = atlasData.sprites[i];
+            var unityY = atlasData.height - sprite.y - sprite.height;
             var spriteId = GUID.Generate();
             var name = string.IsNullOrWhiteSpace(sprite.name) ? "sprite_" + i : sprite.name;
             rects[i] = new SpriteRect
@@ -442,7 +502,7 @@ public static class SpriteSheetImporter
         }
 
         dataProvider.Apply();
-        importer.SaveAndReimport();
+        textureImporter.SaveAndReimport();
         Debug.Log("SpriteForge sliced " + rects.Length + " sprites on " + texturePath + ".");
         return true;
     }

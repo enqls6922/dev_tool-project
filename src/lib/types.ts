@@ -1,12 +1,17 @@
-export const TILE_SIZES = [16, 32, 64, 128] as const;
+export const TILE_SIZES = [16, 24, 32, 48, 64] as const;
 
-export type TileSize = (typeof TILE_SIZES)[number];
+/** Keep the trimmed sprite's own pixel size instead of fitting a square tile. */
+export const ORIGINAL_TILE_SIZE = "original" as const;
+
+export type TileSize = (typeof TILE_SIZES)[number] | typeof ORIGINAL_TILE_SIZE;
 
 export type PackSettings = {
   tileSize: TileSize;
   trimAlpha: boolean;
   padding: number;
   pixelated: boolean;
+  /** Expand each atlas edge to the next power of two that still contains the packed sprites. */
+  forcePowerOfTwo: boolean;
 };
 
 export const DEFAULT_SETTINGS: PackSettings = {
@@ -14,6 +19,7 @@ export const DEFAULT_SETTINGS: PackSettings = {
   trimAlpha: true,
   padding: 1,
   pixelated: false,
+  forcePowerOfTwo: true,
 };
 
 export type SpriteRect = {
@@ -30,10 +36,12 @@ export type AtlasDocument = {
   image: "Atlas.png";
   width: number;
   height: number;
+  /** Square tile edge, or 0 when sprites keep their trimmed original size. */
   tileSize: number;
   padding: number;
   trimAlpha: boolean;
   pixelated: boolean;
+  forcePowerOfTwo: boolean;
   sprites: SpriteRect[];
 };
 

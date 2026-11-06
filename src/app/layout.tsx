@@ -13,9 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SpriteForge - AI Asset Normalizer & Atlas Packer",
-  description:
-    "Browser-only tool that trims transparent padding, centers sprites on square tiles, and packs a Unity-ready atlas.",
+  title: "SpriteForge",
+  description: "Turn messy AI pixel art into clean, Unity-ready sprite atlases in seconds.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
