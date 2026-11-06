@@ -3,6 +3,7 @@
 import { Grid3x3, X } from "lucide-react";
 import { useState } from "react";
 import { DropZone } from "@/components/DropZone";
+import { HelpTip } from "@/components/HelpTip";
 import { RuleTilePreview } from "@/components/RuleTilePreview";
 import { useRuleTileForge } from "@/hooks/useRuleTileForge";
 import {
@@ -48,8 +49,15 @@ export function RuleTileForge() {
             </div>
 
             <fieldset>
-              <legend className="mb-2 text-xs font-medium tracking-wide text-[#9aa3b5] uppercase">레이아웃 프리셋</legend>
-              <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="레이아웃 프리셋">
+              <legend className="mb-2 flex items-center gap-1.5 text-xs font-medium tracking-wide text-[#9aa3b5] uppercase">
+                레이아웃 선택
+                <span className="font-normal tracking-normal text-[#6f788a] normal-case">Preset</span>
+                <HelpTip
+                  label="레이아웃 선택 안내"
+                  text="PixelLab에서 다운로드할 때 선택한 레이아웃과 동일한 포맷을 골라주세요. 잘 모르겠다면 기본값인 '15-tileset'을 권장합니다."
+                />
+              </legend>
+              <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="레이아웃 선택">
                 {RULE_PRESETS.map((id) => {
                   const info = PRESET_INFO[id];
                   const selected = forge.preset === id;
@@ -75,8 +83,15 @@ export function RuleTileForge() {
             </fieldset>
 
             <fieldset className="mt-4">
-              <legend className="mb-2 text-xs font-medium tracking-wide text-[#9aa3b5] uppercase">타일 단위 크기</legend>
-              <div className="grid grid-cols-4 gap-1.5" role="radiogroup" aria-label="타일 단위 크기">
+              <legend className="mb-2 flex items-center gap-1.5 text-xs font-medium tracking-wide text-[#9aa3b5] uppercase">
+                타일 규격
+                <span className="font-normal tracking-normal text-[#6f788a] normal-case">Tile Size</span>
+                <HelpTip
+                  label="타일 규격 안내"
+                  text="개별 타일 한 칸의 가로x세로 픽셀 크기입니다. 원본 에셋의 그리드 규격(보통 16x16 또는 32x32)과 일치해야 정확히 잘립니다."
+                />
+              </legend>
+              <div className="grid grid-cols-4 gap-1.5" role="radiogroup" aria-label="타일 규격">
                 {RULE_TILE_SIZES.map((size) => {
                   const selected = forge.tileSize === size;
                   return (
