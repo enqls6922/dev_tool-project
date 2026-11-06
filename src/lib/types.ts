@@ -12,6 +12,8 @@ export type PackSettings = {
   pixelated: boolean;
   /** Expand each atlas edge to the next power of two that still contains the packed sprites. */
   forcePowerOfTwo: boolean;
+  /** Clear alpha 1–30 ghost texels before trim and pack. */
+  cleanGhostPixels: boolean;
 };
 
 export const DEFAULT_SETTINGS: PackSettings = {
@@ -20,6 +22,7 @@ export const DEFAULT_SETTINGS: PackSettings = {
   padding: 1,
   pixelated: false,
   forcePowerOfTwo: true,
+  cleanGhostPixels: true,
 };
 
 export type SpriteRect = {

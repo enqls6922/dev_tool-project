@@ -1,8 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { canvasToPngBlob } from "@/lib/exportPack";
 import { downloadRuleTilePack } from "@/lib/exportRuleTile";
-import { isPngFile, loadImage } from "@/lib/imageProcessor";
+import {
+  MAX_IMAGE_EDGE,
+  cleanCanvasGhostPixels,
+  drawImageToCanvas,
+  isPngFile,
+  loadImage,
+} from "@/lib/imageProcessor";
 import {
   analyzeSheet,
   type RulePreset,
@@ -13,20 +20,28 @@ import {
 export function useRuleTileForge() {
   const [preset, setPreset] = useState<RulePreset>("15-tileset");
   const [tileSize, setTileSize] = useState<RuleTileSize>(32);
+  const [cleanGhostPixels, setCleanGhostPixelsState] = useState(true);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
+  const [ghostsRemoved, setGhostsRemoved] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const urlRef = useRef<string | null>(null);
+  const exportRef = useRef<Blob | null>(null);
+  const processingRef = useRef(false);
+  const runRef = useRef(0);
   const mountedRef = useRef(true);
+  const fileRef = useRef<File | null>(null);
+  const cleanRef = useRef(true);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      runRef.current += 1;
       if (urlRef.current) URL.revokeObjectURL(urlRef.current);
     };
   }, []);
@@ -41,7 +56,63 @@ export function useRuleTileForge() {
     });
   }, [imageSize, tileSize, preset]);
 
-  async function addFiles(files: File[]) {
+  function releasePreview() {
+    if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+    urlRef.current = null;
+    exportRef.current = null;
+  }
+
+  async function renderSheet(source: File, clean: boolean) {
+    const run = ++runRef.current;
+    processingRef.current = true;
+    setLoading(true);
+    setError(null);
+    try {
+      const image = await loadImage(source);
+      if (!mountedRef.current || run !== runRef.current) return;
+      const width = image.naturalWidth;
+      const height = image.naturalHeight;
+      if (width > MAX_IMAGE_EDGE || height > MAX_IMAGE_EDGE) {
+        throw new Error(`한 변이 ${MAX_IMAGE_EDGE}px를 넘습니다.`);
+      }
+
+      let blob: Blob = source;
+      let removed: number | null = null;
+      if (clean) {
+        const canvas = drawImageToCanvas(image, width, height);
+        removed = cleanCanvasGhostPixels(canvas);
+        blob = await canvasToPngBlob(canvas);
+        if (!mountedRef.current || run !== runRef.current) return;
+      }
+
+      const url = URL.createObjectURL(blob);
+      if (!mountedRef.current || run !== runRef.current) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+      releasePreview();
+      urlRef.current = url;
+      exportRef.current = blob;
+      setPreviewUrl(url);
+      setImageSize({ width, height });
+      setGhostsRemoved(removed);
+      setError(null);
+    } catch (caught) {
+      if (!mountedRef.current || run !== runRef.current) return;
+      releasePreview();
+      setPreviewUrl(null);
+      setImageSize(null);
+      setGhostsRemoved(null);
+      setError(caught instanceof Error ? caught.message : "이미지를 읽지 못했습니다.");
+    } finally {
+      if (mountedRef.current && run === runRef.current) {
+        processingRef.current = false;
+        setLoading(false);
+      }
+    }
+  }
+
+  function addFiles(files: File[]) {
     const pngs = files.filter((item) => isPngFile(item));
     if (pngs.length === 0) {
       setNotice("PNG만 올릴 수 있습니다.");
@@ -52,41 +123,38 @@ export function useRuleTileForge() {
     } else {
       setNotice(null);
     }
+    const next = pngs[0];
+    fileRef.current = next;
+    setFile(next);
+    void renderSheet(next, cleanRef.current);
+  }
 
-    setLoading(true);
-    setError(null);
-    try {
-      const image = await loadImage(pngs[0]);
-      if (!mountedRef.current) return;
-      const url = URL.createObjectURL(pngs[0]);
-      if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-      urlRef.current = url;
-      setFile(pngs[0]);
-      setPreviewUrl(url);
-      setImageSize({ width: image.naturalWidth, height: image.naturalHeight });
-    } catch (caught) {
-      if (!mountedRef.current) return;
-      setError(caught instanceof Error ? caught.message : "이미지를 읽지 못했습니다.");
-    } finally {
-      if (mountedRef.current) setLoading(false);
-    }
+  function setCleanGhostPixels(next: boolean) {
+    cleanRef.current = next;
+    setCleanGhostPixelsState(next);
+    const source = fileRef.current;
+    if (source) void renderSheet(source, next);
   }
 
   function clearSheet() {
-    if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-    urlRef.current = null;
+    runRef.current += 1;
+    processingRef.current = false;
+    fileRef.current = null;
+    releasePreview();
     setFile(null);
     setPreviewUrl(null);
     setImageSize(null);
+    setGhostsRemoved(null);
+    setLoading(false);
     setNotice(null);
     setError(null);
   }
 
   async function download() {
-    if (!file || !analysis?.data) return;
+    if (!exportRef.current || processingRef.current || !analysis?.data) return;
     setDownloading(true);
     try {
-      await downloadRuleTilePack(file, analysis.data);
+      await downloadRuleTilePack(exportRef.current, analysis.data);
     } catch (caught) {
       if (!mountedRef.current) return;
       setError(caught instanceof Error ? caught.message : "ZIP을 만들지 못했습니다.");
@@ -100,6 +168,9 @@ export function useRuleTileForge() {
     setPreset,
     tileSize,
     setTileSize,
+    cleanGhostPixels,
+    setCleanGhostPixels,
+    ghostsRemoved,
     file,
     previewUrl,
     imageSize,

@@ -36,7 +36,7 @@ export function RuleTilePreview({
   const columns = tileSize > 0 ? width / tileSize : 0;
 
   return (
-    <section className="rounded-2xl border border-[#2a3140] bg-[#13171f]/95 p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] lg:sticky lg:top-6">
+    <section className="rounded-2xl border border-[#2a3140] bg-[#13171f]/95 p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] lg:sticky lg:top-16">
       <div className="mb-4">
         <h2 className="text-sm font-semibold text-[#ece7df]">타일셋 프리뷰</h2>
         <p className="mt-1 text-xs leading-5 text-[#9aa3b5]">

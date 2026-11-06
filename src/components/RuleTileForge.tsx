@@ -3,6 +3,7 @@
 import { Grid3x3, X } from "lucide-react";
 import { useState } from "react";
 import { DropZone } from "@/components/DropZone";
+import { GhostPixelToggle } from "@/components/GhostPixelToggle";
 import { HelpTip } from "@/components/HelpTip";
 import { RuleTilePreview } from "@/components/RuleTilePreview";
 import { useRuleTileForge } from "@/hooks/useRuleTileForge";
@@ -112,6 +113,20 @@ export function RuleTileForge() {
                   );
                 })}
               </div>
+            </fieldset>
+
+            <fieldset className="mt-4">
+              <legend className="text-xs font-medium tracking-wide text-[#9aa3b5] uppercase">정규화</legend>
+              <GhostPixelToggle
+                className="mt-2"
+                checked={forge.cleanGhostPixels}
+                onChange={forge.setCleanGhostPixels}
+                detail={
+                  forge.ghostsRemoved === null
+                    ? null
+                    : `이번 시트에서 고스트 픽셀 ${forge.ghostsRemoved.toLocaleString("ko-KR")}개를 투명으로 바꿨습니다.`
+                }
+              />
             </fieldset>
           </section>
 

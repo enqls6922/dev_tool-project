@@ -1,6 +1,7 @@
 "use client";
 
 import { Crosshair, Scissors, SlidersHorizontal } from "lucide-react";
+import { GhostPixelToggle } from "@/components/GhostPixelToggle";
 import { ORIGINAL_TILE_SIZE, TILE_SIZES, type PackSettings, type TileSize } from "@/lib/types";
 
 type Props = {
@@ -103,6 +104,11 @@ export function ControlPanel({ settings, onChange }: Props) {
           />
         </button>
       </div>
+
+      <GhostPixelToggle
+        checked={settings.cleanGhostPixels}
+        onChange={(cleanGhostPixels) => onChange({ ...settings, cleanGhostPixels })}
+      />
 
       <label className="mt-4 block" htmlFor="padding">
         <span className="mb-2 flex items-center justify-between text-xs font-medium tracking-wide text-[#9aa3b5] uppercase">
