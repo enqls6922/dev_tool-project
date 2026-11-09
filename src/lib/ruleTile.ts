@@ -708,18 +708,8 @@ function slotsForPreset(preset: RulePreset, shape: FifteenShape): Slot[] {
   return fifteenSlots(shape);
 }
 
-function wangCardinals(north: 0 | 1, east: 0 | 1, south: 0 | 1, west: 0 | 1): Neighbors {
-  const bit = (filled: 0 | 1): NeighborValue => (filled === 1 ? 1 : 2);
-  return {
-    Top: bit(north),
-    Bottom: bit(south),
-    Left: bit(west),
-    Right: bit(east),
-    TopLeft: 0,
-    TopRight: 0,
-    BottomLeft: 0,
-    BottomRight: 0,
-  };
+function wangNeighbors(patch: Partial<Neighbors>): Neighbors {
+  return { ...emptyNeighbors(), ...patch };
 }
 
 function wangInner(open: "TopLeft" | "TopRight" | "BottomLeft" | "BottomRight"): Neighbors {
@@ -740,34 +730,51 @@ function wangFixedSlot(
 }
 
 /**
- * 5×8 rules in the fixed table. Cardinals are fully specified.
- * Diagonals matter only for the full center versus a single inner corner.
- * Every other painted cell is an outer-border sprite from WANG_5X8_BORDER,
- * or tile_06 when no cardinal neighbour exists.
+ * 5×8 rules in check order. Each sprite is registered once.
+ * Unity and the sandbox use the first match, so this array is the priority:
+ * inner corners, outer corners, straight edges, full floor, then the isolated tile.
+ * Do not sort these by condition count. A straight edge names fewer cells than an
+ * outer corner, and that sort paints the wall sprite over the corner.
+ *
+ * An inner corner is one diagonal gap. The mapping's This/NotThis cells are
+ * required, and every other neighbour is This. A convex corner fails that check
+ * and falls through to the outer-corner rule.
  */
 function wangFixedSlots(): Slot[] {
   const floor = neighborsFromCornerMask(15);
   return [
-    wangFixedSlot(WANG_5X8_INDEX.floor, "floor", "내부 바닥", 15, floor, true),
     wangFixedSlot(WANG_5X8_INDEX.innerNW, "inner_nw", "북서 안쪽 코너", 15, wangInner("TopLeft")),
     wangFixedSlot(WANG_5X8_INDEX.innerNE, "inner_ne", "북동 안쪽 코너", 15, wangInner("TopRight")),
     wangFixedSlot(WANG_5X8_INDEX.innerSW, "inner_sw", "남서 안쪽 코너", 15, wangInner("BottomLeft")),
     wangFixedSlot(WANG_5X8_INDEX.innerSE, "inner_se", "남동 안쪽 코너", 15, wangInner("BottomRight")),
-    wangFixedSlot(WANG_5X8_INDEX.outerNW, "outer_nw", "북서 외곽 코너", 6, wangCardinals(0, 1, 1, 0)),
-    wangFixedSlot(WANG_5X8_INDEX.outerNE, "outer_ne", "북동 외곽 코너", 12, wangCardinals(0, 0, 1, 1)),
-    wangFixedSlot(WANG_5X8_INDEX.outerSW, "outer_sw", "남서 외곽 코너", 3, wangCardinals(1, 1, 0, 0)),
-    wangFixedSlot(WANG_5X8_INDEX.outerSE, "outer_se", "남동 외곽 코너", 9, wangCardinals(1, 0, 0, 1)),
-    wangFixedSlot(WANG_5X8_INDEX.north, "north", "북쪽 상단 벽면", 14, wangCardinals(0, 1, 1, 1)),
-    wangFixedSlot(WANG_5X8_INDEX.south, "south", "남쪽 하단 바닥경계", 11, wangCardinals(1, 1, 0, 1)),
-    wangFixedSlot(WANG_5X8_INDEX.west, "west", "서쪽 좌측 세로벽", 7, wangCardinals(1, 1, 1, 0)),
-    wangFixedSlot(WANG_5X8_INDEX.east, "east", "동쪽 우측 세로벽", 13, wangCardinals(1, 0, 1, 1)),
-    wangFixedSlot(WANG_5X8_INDEX.single, "single", "고립 단독", 0, wangCardinals(0, 0, 0, 0)),
-    wangFixedSlot(WANG_5X8_INDEX.north, "corridor_ew", "북쪽 상단 벽면", 10, wangCardinals(0, 1, 0, 1)),
-    wangFixedSlot(WANG_5X8_INDEX.west, "corridor_ns", "서쪽 좌측 세로벽", 5, wangCardinals(1, 0, 1, 0)),
-    wangFixedSlot(WANG_5X8_INDEX.south, "tip_n", "남쪽 하단 바닥경계", 1, wangCardinals(1, 0, 0, 0)),
-    wangFixedSlot(WANG_5X8_INDEX.west, "tip_e", "서쪽 좌측 세로벽", 2, wangCardinals(0, 1, 0, 0)),
-    wangFixedSlot(WANG_5X8_INDEX.north, "tip_s", "북쪽 상단 벽면", 4, wangCardinals(0, 0, 1, 0)),
-    wangFixedSlot(WANG_5X8_INDEX.east, "tip_w", "동쪽 우측 세로벽", 8, wangCardinals(0, 0, 0, 1)),
+    wangFixedSlot(WANG_5X8_INDEX.outerNW, "outer_nw", "북서 외곽 코너", 6, wangNeighbors({
+      Bottom: 1, Right: 1, Top: 2, Left: 2,
+    })),
+    wangFixedSlot(WANG_5X8_INDEX.outerNE, "outer_ne", "북동 외곽 코너", 12, wangNeighbors({
+      Bottom: 1, Left: 1, Top: 2, Right: 2,
+    })),
+    wangFixedSlot(WANG_5X8_INDEX.outerSW, "outer_sw", "남서 외곽 코너", 3, wangNeighbors({
+      Top: 1, Right: 1, Bottom: 2, Left: 2,
+    })),
+    wangFixedSlot(WANG_5X8_INDEX.outerSE, "outer_se", "남동 외곽 코너", 9, wangNeighbors({
+      Top: 1, Left: 1, Bottom: 2, Right: 2,
+    })),
+    wangFixedSlot(WANG_5X8_INDEX.north, "north", "북쪽 상단 벽면", 4, wangNeighbors({
+      Bottom: 1, Top: 2,
+    })),
+    wangFixedSlot(WANG_5X8_INDEX.south, "south", "남쪽 하단 바닥", 1, wangNeighbors({
+      Top: 1, Bottom: 2,
+    })),
+    wangFixedSlot(WANG_5X8_INDEX.west, "west", "서쪽 좌측 세로벽", 2, wangNeighbors({
+      Right: 1, Left: 2,
+    })),
+    wangFixedSlot(WANG_5X8_INDEX.east, "east", "동쪽 우측 세로벽", 8, wangNeighbors({
+      Left: 1, Right: 2,
+    })),
+    wangFixedSlot(WANG_5X8_INDEX.floor, "floor", "내부 바닥", 15, floor, true),
+    wangFixedSlot(WANG_5X8_INDEX.single, "single", "고립 단독", 0, wangNeighbors({
+      Top: 2, Bottom: 2, Left: 2, Right: 2,
+    })),
   ];
 }
 
@@ -789,15 +796,10 @@ function wangSlots(tall: boolean): Slot[] {
   return slots;
 }
 
-function orderedRules(slots: Slot[]): RuleEntry[] {
-  return slots
+function orderedRules(slots: Slot[], preserveOrder = false): RuleEntry[] {
+  const entries = slots
     .filter((slot) => slot.rule)
     .map((slot) => ({
-      slot,
-      weight: countCondition(slot.neighbors, 1) * 10 + countCondition(slot.neighbors, 2),
-    }))
-    .sort((a, b) => b.weight - a.weight || a.slot.index - b.slot.index)
-    .map(({ slot }) => ({
       index: slot.index,
       sprite: tileSpriteName(slot.index),
       name: slot.name,
@@ -805,11 +807,19 @@ function orderedRules(slots: Slot[]): RuleEntry[] {
       mask: slot.mask,
       neighbors: cloneNeighbors(slot.neighbors),
     }));
+  if (preserveOrder) return entries;
+  return entries
+    .map((rule) => ({
+      rule,
+      weight: countCondition(rule.neighbors, 1) * 10 + countCondition(rule.neighbors, 2),
+    }))
+    .sort((a, b) => b.weight - a.weight || a.rule.index - b.rule.index)
+    .map(({ rule }) => rule);
 }
 
 /** Unity's first matching rule index, or null when the default sprite applies. */
 export function wangMatchingIndex(actual: Neighbors, tall: boolean): number | null {
-  return firstMatchingRule(orderedRules(wangSlots(tall)), actual);
+  return firstMatchingRule(orderedRules(wangSlots(tall), tall), actual);
 }
 
 /**
@@ -817,7 +827,7 @@ export function wangMatchingIndex(actual: Neighbors, tall: boolean): number | nu
  * A 5×8 miss is the stone floor. Pillar caps and black cells are rejected.
  */
 export function wangResolve(actual: Neighbors, tall: boolean): { index: number; mask: number } {
-  const rules = orderedRules(wangSlots(tall));
+  const rules = orderedRules(wangSlots(tall), tall);
   for (const rule of rules) {
     if (!ruleMatches(rule.neighbors, actual)) continue;
     return tall ? guardWang5x8Sprite(rule.index, rule.mask, actual) : { index: rule.index, mask: rule.mask };
@@ -966,7 +976,7 @@ export function analyzeSheet(input: {
     };
   });
 
-  const rules = orderedRules(slots);
+  const rules = orderedRules(slots, tallWang);
 
   const warning = rows > mappedRows
     ? `세로가 ${rows}칸입니다. 위쪽 ${mappedRows}줄만 룰에 넣습니다.`
@@ -1005,6 +1015,9 @@ export function buildRuleTileScript(): string {
 //
 // RuleData.json neighbor values: 0 = Ignore, 1 = This, 2 = NotThis.
 // Rules are stored in check order. Unity uses the first match, then m_DefaultSprite.
+// A 5x8 Wang sheet has 14 rules, each sprite once, in this order:
+// inner corners, outer corners, straight edges, the full floor, then the single tile.
+// Straight edges name only the facing side. They must stay after the outer corners.
 // 15-tileset rules mark the three cells around each filled corner as This and leave
 // the rest Ignore, with stricter rules first.
 // PixelLab 15-tileset is 3 columns by 5 rows (indices 0-14). A native 4x4 or 4x8
@@ -1261,15 +1274,9 @@ public static class RuleTileBuilder
         {
             case "floor": return 16;
             case "north": return 1;
-            case "corridor_ew": return 1;
-            case "tip_s": return 1;
             case "south": return 26;
-            case "tip_n": return 26;
             case "west": return 15;
-            case "corridor_ns": return 15;
-            case "tip_e": return 15;
             case "east": return 18;
-            case "tip_w": return 18;
             case "outer_nw": return 0;
             case "outer_ne": return 2;
             case "outer_sw": return 25;
