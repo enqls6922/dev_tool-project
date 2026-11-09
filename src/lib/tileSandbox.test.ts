@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   FIFTEEN_TILE_MASKS,
+  WANG_5X8_BORDER,
+  WANG_5X8_INDEX,
   WANG_TALL_FLOOR_INDEX,
   godotCellForMask,
   godotSourceRect,
+  isWang5x8Black,
   pixelLabTileIndex,
-  wangSurfaceIndex,
 } from "./ruleTile.ts";
 import {
   CARDINAL,
@@ -74,42 +76,60 @@ function fillRect(cells: number[], x0: number, y0: number, x1: number, y1: numbe
   return next;
 }
 
-test("a 5x8 Wang rectangle paints the flat floor and leaves the pillar wall unused", () => {
+test("a 5x8 Wang rectangle fills tile_16 and keeps the fixed border", () => {
   const layout = { kind: "wang" as const, tall: true };
+  const border = new Set<number>(WANG_5X8_BORDER);
   let cells = fillRect(emptySandbox(), 2, 2, 5, 4);
 
   const at = (x: number, y: number) => sandboxSourceRect(cells, x, y, 32, 8, layout);
   const interior = at(3, 3);
   assert.ok(interior);
   assert.equal(interior.index, WANG_TALL_FLOOR_INDEX);
+  assert.equal(interior.index, WANG_5X8_INDEX.floor);
   assert.equal(interior.mask, 15);
   assert.deepEqual(
     { x: interior.x, y: interior.y, width: interior.width, height: interior.height },
-    { x: 0, y: 192, width: 32, height: 32 },
+    { x: 32, y: 96, width: 32, height: 32 },
   );
-  assert.equal(at(4, 3)?.index, WANG_TALL_FLOOR_INDEX);
-  assert.equal(at(3, 2)?.index, wangSurfaceIndex(12, true));
-  assert.equal(at(3, 4)?.index, wangSurfaceIndex(3, true));
-  assert.equal(at(2, 3)?.index, wangSurfaceIndex(10, true));
-  assert.equal(at(5, 3)?.index, wangSurfaceIndex(5, true));
-  assert.equal(at(2, 2)?.index, wangSurfaceIndex(8, true));
-  assert.equal(at(5, 2)?.index, wangSurfaceIndex(4, true));
-  assert.equal(at(2, 4)?.index, wangSurfaceIndex(2, true));
-  assert.equal(at(5, 4)?.index, wangSurfaceIndex(1, true));
-  assert.notEqual(at(3, 3)?.index, 15);
-  assert.notEqual(at(3, 3)?.index, 25);
-  assert.notEqual(at(3, 3)?.index, 0);
+  assert.equal(at(4, 3)?.index, 16);
+  assert.equal(at(3, 2)?.index, WANG_5X8_INDEX.north);
+  assert.equal(at(4, 2)?.index, WANG_5X8_INDEX.north);
+  assert.equal(at(3, 4)?.index, WANG_5X8_INDEX.south);
+  assert.equal(at(4, 4)?.index, WANG_5X8_INDEX.south);
+  assert.equal(at(2, 3)?.index, WANG_5X8_INDEX.west);
+  assert.equal(at(5, 3)?.index, WANG_5X8_INDEX.east);
+  assert.equal(at(2, 2)?.index, WANG_5X8_INDEX.outerNW);
+  assert.equal(at(5, 2)?.index, WANG_5X8_INDEX.outerNE);
+  assert.equal(at(2, 4)?.index, WANG_5X8_INDEX.outerSW);
+  assert.equal(at(5, 4)?.index, WANG_5X8_INDEX.outerSE);
+
+  for (let y = 2; y <= 4; y += 1) {
+    for (let x = 2; x <= 5; x += 1) {
+      const sample = at(x, y);
+      assert.ok(sample);
+      assert.equal(isWang5x8Black(sample.index), false);
+      const surrounded = x > 2 && x < 5 && y > 2 && y < 4;
+      if (surrounded) {
+        assert.equal(sample.index, 16);
+        assert.equal(sample.index === 0 || sample.index === 1 || sample.index === 2, false);
+      } else {
+        assert.equal(border.has(sample.index), true);
+      }
+    }
+  }
 
   cells = paintCell(cells, 4, 2, 0);
-  assert.equal(sandboxTileIndex(cells, 3, 3, 8, layout), wangSurfaceIndex(13, true));
+  assert.equal(sandboxTileIndex(cells, 3, 3, 8, layout), WANG_5X8_INDEX.innerNE);
+  assert.equal(sandboxTileIndex(cells, 4, 3, 8, layout), WANG_5X8_INDEX.north);
 
   const alone = sandboxSourceRect(fillRect(emptySandbox(), 1, 1, 1, 1), 1, 1, 32, 8, layout);
   assert.ok(alone);
-  assert.equal(alone.index, WANG_TALL_FLOOR_INDEX);
-  assert.equal(alone.mask, 15);
+  assert.equal(alone.index, WANG_5X8_INDEX.single);
+  assert.equal(alone.index, 6);
   assert.equal(alone.width, 32);
   assert.equal(alone.height, 32);
   assert.notEqual(alone.index, 0);
+  assert.notEqual(alone.index, 16);
 });
 
 test("a Godot sandbox cell samples the 47-blob template", () => {
