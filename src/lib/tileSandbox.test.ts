@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { FIFTEEN_TILE_MASKS, godotCellForMask, pixelLabTileIndex, wangEdgeIndex } from "./ruleTile.ts";
+import {
+  FIFTEEN_TILE_MASKS,
+  WANG_TALL_FLOOR_INDEX,
+  godotCellForMask,
+  godotSourceRect,
+  pixelLabTileIndex,
+  wangSurfaceIndex,
+} from "./ruleTile.ts";
 import {
   CARDINAL,
   cardinalMaskAt,
@@ -67,44 +74,42 @@ function fillRect(cells: number[], x0: number, y0: number, x1: number, y1: numbe
   return next;
 }
 
-test("a 5x8 Wang rectangle fills the floor and keeps square border tiles", () => {
-  const layout = { kind: "wang" as const, edgeBand: true };
+test("a 5x8 Wang rectangle paints the flat floor and leaves the pillar wall unused", () => {
+  const layout = { kind: "wang" as const, tall: true };
   let cells = fillRect(emptySandbox(), 2, 2, 5, 4);
 
   const at = (x: number, y: number) => sandboxSourceRect(cells, x, y, 32, 8, layout);
   const interior = at(3, 3);
   assert.ok(interior);
-  assert.equal(interior.index, 15);
+  assert.equal(interior.index, WANG_TALL_FLOOR_INDEX);
   assert.equal(interior.mask, 15);
   assert.deepEqual(
     { x: interior.x, y: interior.y, width: interior.width, height: interior.height },
-    { x: 0, y: 96, width: 32, height: 32 },
+    { x: 0, y: 192, width: 32, height: 32 },
   );
-  assert.equal(at(4, 3)?.index, 15);
-  assert.equal(at(3, 2)?.index, 12);
-  assert.equal(at(3, 4)?.index, 3);
-  assert.equal(at(2, 3)?.index, 10);
-  assert.equal(at(5, 3)?.index, 5);
-  assert.equal(at(2, 2)?.index, 8);
-  assert.equal(at(5, 2)?.index, 4);
-  assert.equal(at(2, 4)?.index, 2);
-  assert.equal(at(5, 4)?.index, 1);
-  assert.notEqual(at(3, 3)?.index, 11);
+  assert.equal(at(4, 3)?.index, WANG_TALL_FLOOR_INDEX);
+  assert.equal(at(3, 2)?.index, wangSurfaceIndex(12, true));
+  assert.equal(at(3, 4)?.index, wangSurfaceIndex(3, true));
+  assert.equal(at(2, 3)?.index, wangSurfaceIndex(10, true));
+  assert.equal(at(5, 3)?.index, wangSurfaceIndex(5, true));
+  assert.equal(at(2, 2)?.index, wangSurfaceIndex(8, true));
+  assert.equal(at(5, 2)?.index, wangSurfaceIndex(4, true));
+  assert.equal(at(2, 4)?.index, wangSurfaceIndex(2, true));
+  assert.equal(at(5, 4)?.index, wangSurfaceIndex(1, true));
+  assert.notEqual(at(3, 3)?.index, 15);
+  assert.notEqual(at(3, 3)?.index, 25);
+  assert.notEqual(at(3, 3)?.index, 0);
 
   cells = paintCell(cells, 4, 2, 0);
-  assert.equal(sandboxTileIndex(cells, 3, 3, 8, layout), 13);
+  assert.equal(sandboxTileIndex(cells, 3, 3, 8, layout), wangSurfaceIndex(13, true));
 
   const alone = sandboxSourceRect(fillRect(emptySandbox(), 1, 1, 1, 1), 1, 1, 32, 8, layout);
   assert.ok(alone);
-  assert.equal(alone.index, 0);
+  assert.equal(alone.index, WANG_TALL_FLOOR_INDEX);
+  assert.equal(alone.mask, 15);
   assert.equal(alone.width, 32);
   assert.equal(alone.height, 32);
-
-  let corridor = emptySandbox();
-  corridor = paintCell(corridor, 2, 3, 1);
-  corridor = paintCell(corridor, 3, 3, 1);
-  corridor = paintCell(corridor, 4, 3, 1);
-  assert.equal(sandboxTileIndex(corridor, 3, 3, 8, layout), wangEdgeIndex(2 | 8));
+  assert.notEqual(alone.index, 0);
 });
 
 test("a Godot sandbox cell samples the 47-blob template", () => {
@@ -130,4 +135,28 @@ test("a Godot sandbox cell samples the 47-blob template", () => {
     { x: corner.x, y: corner.y, width: corner.width, height: corner.height },
     { x: (corner.index % 12) * 32, y: Math.floor(corner.index / 12) * 32, width: 32, height: 32 },
   );
+
+  const block = fillRect(emptySandbox(), 2, 2, 4, 4);
+  const center = sandboxSourceRect(block, 3, 3, 32, 8, layout);
+  assert.ok(center);
+  assert.equal(center.mask, 255);
+  assert.deepEqual(
+    { index: center.index, x: center.x, y: center.y, width: center.width, height: center.height },
+    godotSourceRect(255, 32),
+  );
+  assert.equal(center.index, 33);
+  assert.equal(center.x, 288);
+  assert.equal(center.y, 64);
+
+  const outer = sandboxSourceRect(block, 2, 2, 32, 8, layout);
+  assert.ok(outer);
+  const outerMask = 4 | 8 | 16;
+  assert.equal(outer.mask, outerMask);
+  assert.deepEqual(
+    { index: outer.index, x: outer.x, y: outer.y, width: outer.width, height: outer.height },
+    godotSourceRect(outerMask, 32),
+  );
+  assert.equal(outer.index, godotCellForMask(outerMask).index);
+  assert.equal(outer.x, 8 * 32);
+  assert.equal(outer.y, 0);
 });

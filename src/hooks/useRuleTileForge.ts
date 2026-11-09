@@ -20,7 +20,7 @@ import {
 } from "@/lib/ruleTile";
 
 export function useRuleTileForge() {
-  const [preset, setPresetState] = useState<RulePreset>("15-tileset");
+  const [preset, setPresetState] = useState<RulePreset>("godot-47");
   const [tileSize, setTileSizeState] = useState<RuleTileSize>(32);
   const [cleanGhostPixels, setCleanGhostPixelsState] = useState(true);
   const [file, setFile] = useState<File | null>(null);
@@ -38,7 +38,7 @@ export function useRuleTileForge() {
   const mountedRef = useRef(true);
   const fileRef = useRef<File | null>(null);
   const cleanRef = useRef(true);
-  const presetRef = useRef<RulePreset>("15-tileset");
+  const presetRef = useRef<RulePreset>("godot-47");
   const tileSizeRef = useRef<RuleTileSize>(32);
 
   useEffect(() => {

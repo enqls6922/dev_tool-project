@@ -19,7 +19,7 @@ const TABS = [
     label: "🗺️ RuleTile Forge",
     panel: "panel-ruletile",
     steps: ["Tileset", "Paint", "Export ZIP"],
-    summary: "PixelLab 15-tileset, Godot 47-Blob, Wang 시트를 Unity Rule Tile로 바꾸고, 8×8 샌드박스에서 바로 칠해 봅니다.",
+    summary: "PixelLab Godot (47-Blob), Wang 5×8, 15-tileset 시트를 Unity Rule Tile로 바꾸고, 8×8 샌드박스에서 바로 칠해 봅니다.",
   },
   {
     id: "sequencer",
