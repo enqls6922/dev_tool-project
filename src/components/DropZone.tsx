@@ -1,7 +1,7 @@
 "use client";
 
 import { ImagePlus, X } from "lucide-react";
-import { useId, useState, type ChangeEvent, type DragEvent } from "react";
+import { useEffect, useId, useRef, useState, type DragEvent } from "react";
 import { ACCEPTED_RASTER_ACCEPT, acceptRasterUploads } from "@/lib/uploadSecurity";
 
 type Props = {
@@ -18,6 +18,8 @@ export function DropZone({
   hint = "여러 장을 한 번에 올릴 수 있습니다. SVG와 그 외 파일은 차단되고, 파일당 15MB, 한 변 4096px까지입니다.",
 }: Props) {
   const inputId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const onFilesRef = useRef(onFiles);
   const [active, setActive] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -27,19 +29,33 @@ export function DropZone({
     if (message) setToast(message);
     else setToast(null);
     if (accepted.length === 0) return;
-    onFiles(accepted);
+    onFilesRef.current(accepted);
   };
+  const takeFilesRef = useRef(takeFiles);
+
+  useEffect(() => {
+    onFilesRef.current = onFiles;
+    takeFilesRef.current = takeFiles;
+  });
+
+  // One DOM listener, shared with drag-and-drop. React's delegated onChange is
+  // not added as well, so a single selection is not imported twice.
+  useEffect(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    const onChange = () => {
+      takeFilesRef.current(input.files);
+      input.value = "";
+    };
+    input.addEventListener("change", onChange);
+    return () => input.removeEventListener("change", onChange);
+  }, []);
 
   const onDrop = (event: DragEvent<HTMLLabelElement>) => {
     event.preventDefault();
     event.stopPropagation();
     setActive(false);
     takeFiles(event.dataTransfer.files);
-  };
-
-  const onChange = (event: ChangeEvent<HTMLInputElement>) => {
-    takeFiles(event.target.files);
-    event.target.value = "";
   };
 
   return (
@@ -88,12 +104,12 @@ export function DropZone({
         <span className="text-sm font-medium text-[#ece7df]">{title}</span>
         <span className="mt-1 max-w-sm text-xs leading-5 text-[#9aa3b5]">{hint}</span>
         <input
+          ref={inputRef}
           id={inputId}
           type="file"
           accept={ACCEPTED_RASTER_ACCEPT}
           multiple={multiple}
           className="sr-only"
-          onChange={onChange}
         />
       </label>
     </div>

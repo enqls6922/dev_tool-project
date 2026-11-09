@@ -171,6 +171,7 @@ export function useSpriteForge() {
       setProgress("아틀라스 패킹 중…");
       const packed = packSprites(packable, nextSettings.padding, {
         forcePowerOfTwo: nextSettings.forcePowerOfTwo,
+        bleed: nextSettings.bleed,
       });
       const blob = await canvasToPngBlob(packed.canvas);
       if (!alive()) return;

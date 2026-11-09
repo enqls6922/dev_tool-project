@@ -1,6 +1,23 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { sanitizeFilename, sanitizeSpriteName, toPngDownloadName, uniqueFileNames } from "./fileNames.ts";
+import {
+  sanitizeDownloadName,
+  sanitizeFilename,
+  sanitizeSpriteName,
+  sanitizeStem,
+  toPngDownloadName,
+  uniqueFileNames,
+} from "./fileNames.ts";
+
+test("file stems drop characters outside the safe set", () => {
+  assert.equal(sanitizeStem("Hero Attack.png"), "Hero_Attack");
+  assert.equal(sanitizeStem("주인공.png"), "");
+  assert.equal(sanitizeStem("../secret.png"), "secret");
+  assert.equal(sanitizeStem("a/b:c.png"), "bc");
+  assert.equal(sanitizeDownloadName("hero@walk.jpg"), "herowalk.jpg");
+  assert.equal(sanitizeDownloadName("주인공.svg"), "sprite.png");
+  assert.equal(sanitizeDownloadName("..\\evil.webp"), "evil.webp");
+});
 
 test("sanitizeFilename keeps the filename allowlist and flattens paths", () => {
   assert.equal(sanitizeFilename("Hero-01_walk.png"), "Hero-01_walk.png");

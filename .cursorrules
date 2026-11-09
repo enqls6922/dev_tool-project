@@ -2,3 +2,4 @@
 - Client-Side Only: All image processing (canvas, trim, packing) must run entirely in the browser (use 'use client').
 - Library: Use 'potpack' for 2D packing, 'jszip' and 'file-saver' for export.
 - Clean Code: Write modular components and handle error boundaries for file uploads.
+- Latest source first: Before editing any file, fetch the latest remote source. Run `git fetch` for the current branch and `main`, then pull or rebase if the local branch is behind. Do not change files until that latest source is in the working tree.

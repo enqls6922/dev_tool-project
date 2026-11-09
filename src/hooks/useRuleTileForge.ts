@@ -6,6 +6,7 @@ import { downloadRuleTilePack } from "@/lib/exportRuleTile";
 import {
   cleanCanvasGhostPixels,
   drawImageToCanvas,
+  isPngFile,
   loadImage,
 } from "@/lib/imageProcessor";
 import { acceptRasterUploads } from "@/lib/uploadSecurity";
@@ -72,11 +73,12 @@ export function useRuleTileForge() {
       const width = image.naturalWidth;
       const height = image.naturalHeight;
 
+      const rasterize = clean || !isPngFile(source);
       let blob: Blob = source;
       let removed: number | null = null;
-      if (clean) {
+      if (rasterize) {
         const canvas = drawImageToCanvas(image, width, height);
-        removed = cleanCanvasGhostPixels(canvas);
+        if (clean) removed = cleanCanvasGhostPixels(canvas);
         blob = await canvasToPngBlob(canvas);
         if (!mountedRef.current || run !== runRef.current) return;
       }

@@ -12,8 +12,10 @@ export type PackSettings = {
   pixelated: boolean;
   /** Expand each atlas edge to the next power of two that still contains the packed sprites. */
   forcePowerOfTwo: boolean;
-  /** Clear alpha 1–30 ghost texels before trim and pack. */
+  /** Clear texels with 0 < alpha < 30 (RGBA zeroed) before trim and pack. */
   cleanGhostPixels: boolean;
+  /** Clamp-copy each sprite edge one pixel outward so tilemap filtering does not tear. */
+  bleed: boolean;
 };
 
 export const DEFAULT_SETTINGS: PackSettings = {
@@ -23,6 +25,7 @@ export const DEFAULT_SETTINGS: PackSettings = {
   pixelated: false,
   forcePowerOfTwo: true,
   cleanGhostPixels: true,
+  bleed: false,
 };
 
 export type SpriteRect = {
@@ -45,6 +48,8 @@ export type AtlasDocument = {
   trimAlpha: boolean;
   pixelated: boolean;
   forcePowerOfTwo: boolean;
+  /** 1 when each sprite rect is the content inset inside a 1px clamp bleed. */
+  bleed: number;
   sprites: SpriteRect[];
 };
 

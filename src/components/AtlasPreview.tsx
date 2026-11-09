@@ -94,7 +94,7 @@ export function AtlasPreview({
           <div className="flex min-h-56 flex-col items-center justify-center px-6 py-16 text-center">
             <p className="text-sm font-medium text-[#ece7df]">시트가 여기에 그려집니다.</p>
             <p className="mt-2 max-w-xs text-xs leading-5 text-[#9aa3b5]">
-              타일 크기, 트림, 패딩을 바꾸면 미리보기가 다시 패킹됩니다.
+              타일 크기, 트림, 블리드, 패딩을 바꾸면 미리보기가 다시 패킹됩니다.
             </p>
           </div>
         )}

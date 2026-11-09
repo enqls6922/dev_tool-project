@@ -35,7 +35,8 @@ function mimeMatchesExtension(type: string, extension: string): boolean {
 export function inspectUpload(file: File): UploadRejection | null {
   const type = file.type.trim().toLowerCase();
   const extension = fileExtension(file.name);
-  if (type === "image/svg+xml" || extension === ".svg" || extension === ".svgz") {
+  const lowerName = file.name.toLowerCase();
+  if (type === "image/svg+xml" || extension === ".svg" || extension === ".svgz" || lowerName.includes(".svg.")) {
     return { file, reason: "svg" };
   }
   if (file.size > MAX_UPLOAD_BYTES) return { file, reason: "size" };

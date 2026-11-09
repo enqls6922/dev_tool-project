@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { sanitizeFilename } from "@/lib/fileNames";
 import { canvasToPngBlob } from "@/lib/exportPack";
 import { downloadMotionJson, downloadMotionPng } from "@/lib/exportMotion";
 import {
@@ -60,7 +61,7 @@ async function decodeFrame(file: File): Promise<MotionFrame> {
     return {
       id,
       name,
-      fileName: file.name,
+      fileName: sanitizeFilename(file.name, "frame"),
       status: bounds ? "ready" : "empty",
       message: bounds ? undefined : "알파 30을 넘는 픽셀이 없습니다.",
       sourceWidth: sourceCanvas.width,
@@ -73,7 +74,7 @@ async function decodeFrame(file: File): Promise<MotionFrame> {
     return {
       id,
       name,
-      fileName: file.name,
+      fileName: sanitizeFilename(file.name, "frame"),
       status: "error",
       message: caught instanceof Error ? caught.message : "이 파일을 읽지 못했습니다.",
       sourceWidth: 0,

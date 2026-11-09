@@ -4,6 +4,7 @@ import {
   buildAtlasDocument,
   clampPadding,
   cleanGhostPixels,
+  extrudeClampBleed,
   findOpaqueBounds,
   generateUnityImporterScript,
   layoutFrames,
@@ -40,20 +41,20 @@ test("findOpaqueBounds returns null for an empty buffer", () => {
   assert.equal(findOpaqueBounds(new Uint8ClampedArray(32), 4, 2), null);
 });
 
-test("cleanGhostPixels clears alpha 1 through 30 and keeps rgb", () => {
+test("cleanGhostPixels zeroes rgba when alpha is between 1 and 29", () => {
   const pixels = new Uint8ClampedArray([
     1, 2, 3, 0,
     4, 5, 6, 1,
-    7, 8, 9, 30,
-    10, 11, 12, 31,
+    7, 8, 9, 29,
+    10, 11, 12, 30,
     13, 14, 15, 255,
   ]);
   assert.equal(cleanGhostPixels(pixels), 2);
   assert.deepEqual(Array.from(pixels), [
     1, 2, 3, 0,
-    4, 5, 6, 0,
-    7, 8, 9, 0,
-    10, 11, 12, 31,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    10, 11, 12, 30,
     13, 14, 15, 255,
   ]);
 });
@@ -61,13 +62,37 @@ test("cleanGhostPixels clears alpha 1 through 30 and keeps rgb", () => {
 test("cleanGhostPixels ignores a short trailing channel", () => {
   const pixels = new Uint8ClampedArray([9, 9, 9, 12, 1, 2]);
   assert.equal(cleanGhostPixels(pixels), 1);
+  assert.equal(pixels[0], 0);
   assert.equal(pixels[3], 0);
   assert.equal(pixels[4], 1);
 });
 
-test("sprite names stay readable and unique", () => {
+test("1px bleed clamp-copies edges and corners", () => {
+  const pixels = new Uint8ClampedArray([
+    1, 0, 0, 255, 2, 0, 0, 255,
+    3, 0, 0, 255, 4, 0, 0, 200,
+  ]);
+  const out = extrudeClampBleed(pixels, 2, 2);
+  assert.equal(out.length, 4 * 4 * 4);
+  const texel = (x: number, y: number) => {
+    const index = (y * 4 + x) * 4;
+    return [out[index], out[index + 3]];
+  };
+  assert.deepEqual(texel(0, 0), [1, 255]);
+  assert.deepEqual(texel(3, 0), [2, 255]);
+  assert.deepEqual(texel(0, 3), [3, 255]);
+  assert.deepEqual(texel(3, 3), [4, 200]);
+  assert.deepEqual(texel(1, 0), [1, 255]);
+  assert.deepEqual(texel(2, 1), [2, 255]);
+  assert.deepEqual(texel(1, 1), [1, 255]);
+  assert.deepEqual(texel(2, 2), [4, 200]);
+});
+
+test("sprite names stay readable, unique, and free of special characters", () => {
   assert.equal(toSpriteName("Hero Attack.png"), "Hero_Attack");
   assert.equal(toSpriteName("주인공.png"), "sprite");
+  assert.equal(toSpriteName("hero@attack.png"), "hero_attack");
+  assert.equal(toSpriteName("../Hero.png"), "Hero");
   assert.equal(toSpriteName(".png"), "sprite");
   assert.equal(toSpriteName(`hero"; System.Console.WriteLine("x").png`), "hero_System_Console_WriteLine_x");
   assert.deepEqual(uniqueSpriteNames(["slime", "slime", "bat", "slime"]), [
@@ -226,6 +251,7 @@ test("original tile size is written as 0 so Unity falls back to 32 pixels per un
   );
   assert.equal(document.tileSize, 0);
   assert.equal(document.forcePowerOfTwo, true);
+  assert.equal(document.bleed, 0);
   assert.equal(document.width, 32);
   assert.equal(document.height, 64);
 });

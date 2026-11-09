@@ -26,7 +26,7 @@ export function PixelCleaner() {
 
       <DropZone
         title="PNG, JPG, WebP를 떨어뜨리거나 클릭"
-        hint="한 장 또는 여러 장. 알파 1–30 고스트 픽셀을 지운 뒤 Before / After로 경계를 확인합니다."
+        hint="한 장 또는 여러 장. 알파가 0보다 크고 30보다 작은 고스트 픽셀의 RGBA를 지운 뒤 Before / After로 경계를 확인합니다."
         onFiles={(files) => {
           void cleaner.addFiles(files);
         }}

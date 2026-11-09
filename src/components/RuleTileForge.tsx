@@ -6,7 +6,9 @@ import { DropZone } from "@/components/DropZone";
 import { GhostPixelToggle } from "@/components/GhostPixelToggle";
 import { HelpTip } from "@/components/HelpTip";
 import { RuleTilePreview } from "@/components/RuleTilePreview";
+import { TileSandbox } from "@/components/TileSandbox";
 import { useRuleTileForge } from "@/hooks/useRuleTileForge";
+import { safeDisplayName } from "@/lib/uploadPolicy";
 import {
   DIRECTION_KEYS,
   PRESET_INFO,
@@ -133,7 +135,7 @@ export function RuleTileForge() {
           <DropZone
             multiple={false}
             title="타일셋 PNG, JPG, WebP를 떨어뜨리거나 클릭"
-            hint="시트 한 장만 올립니다. 칸 나누기와 RuleData.json은 이 브라우저에서 만듭니다."
+            hint="시트 한 장만 올립니다. SVG는 받지 않습니다. 칸 나누기와 RuleData.json은 이 브라우저에서 만듭니다."
             onFiles={(files) => {
               setActiveIndex(null);
               void forge.addFiles(files);
@@ -142,8 +144,8 @@ export function RuleTileForge() {
 
           {forge.file ? (
             <div className="flex items-center justify-between gap-3 rounded-xl border border-[#2a3140] bg-[#0d1016] px-3 py-2">
-              <p className="truncate text-xs text-[#c5cbd6]" title={forge.file.name}>
-                {forge.file.name}
+              <p className="truncate text-xs text-[#c5cbd6]" title={safeDisplayName(forge.file.name)}>
+                {safeDisplayName(forge.file.name)}
               </p>
               <button
                 type="button"
@@ -170,6 +172,17 @@ export function RuleTileForge() {
           />
         </div>
 
+        <div className="flex flex-col gap-4">
+        <TileSandbox
+          previewUrl={forge.previewUrl}
+          tileSize={forge.tileSize}
+          canSample={
+            forge.preset === "15-tileset" &&
+            !forge.analysis?.error &&
+            forge.analysis?.columns === 4 &&
+            (forge.analysis?.rows ?? 0) >= 4
+          }
+        />
         <RuleTilePreview
           previewUrl={forge.previewUrl}
           width={forge.imageSize?.width ?? 0}
@@ -186,6 +199,7 @@ export function RuleTileForge() {
             void forge.download();
           }}
         />
+        </div>
       </div>
     </div>
   );

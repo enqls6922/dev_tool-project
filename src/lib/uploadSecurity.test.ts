@@ -30,6 +30,7 @@ test("raster uploads accept png, jpeg, and webp and reject svg, markup, and over
   assert.equal(svg?.reason, "svg");
   assert.equal(inspectUpload(new File([new Uint8Array(8)], "evil.png", { type: "image/svg+xml" }))?.reason, "svg");
   assert.equal(inspectUpload(new File([new Uint8Array(8)], "poly.svg", { type: "image/png" }))?.reason, "svg");
+  assert.equal(inspectUpload(new File([new Uint8Array(8)], "icon.svg.png", { type: "image/png" }))?.reason, "svg");
   assert.equal(inspectUpload(new File([new Uint8Array(8)], "notes.txt", { type: "text/plain" }))?.reason, "type");
   assert.equal(inspectUpload(new File([new Uint8Array(8)], "page.html", { type: "image/png" }))?.reason, "type");
 
