@@ -25,7 +25,7 @@ export function PixelCleaner() {
       ) : null}
 
       <DropZone
-        title="PNG를 떨어뜨리거나 클릭"
+        title="PNG, JPG, WebP를 떨어뜨리거나 클릭"
         hint="한 장 또는 여러 장. 알파 1–30 고스트 픽셀을 지운 뒤 Before / After로 경계를 확인합니다."
         onFiles={(files) => {
           void cleaner.addFiles(files);
@@ -123,8 +123,8 @@ function CleanerCard({
     <li className="rounded-2xl border border-[#2a3140] bg-[#13171f]/95 p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="truncate text-sm font-semibold text-[#ece7df]" title={item.name}>
-            {item.name}
+          <h2 className="truncate text-sm font-semibold text-[#ece7df]" title={item.displayName}>
+            {item.displayName}
           </h2>
           <p className="mt-1 text-xs text-[#9aa3b5]">
             {item.status === "error"
@@ -146,7 +146,7 @@ function CleanerCard({
           <button
             type="button"
             onClick={onRemove}
-            aria-label={`${item.name} 제거`}
+            aria-label={`${item.displayName} 제거`}
             className="flex size-9 items-center justify-center rounded-lg text-[#c5cbd6] transition hover:bg-[#222836] hover:text-[#ece7df]"
           >
             <X className="size-4" aria-hidden />
@@ -156,8 +156,8 @@ function CleanerCard({
 
       {item.status === "ready" && item.beforeUrl && item.afterUrl && item.width && item.height ? (
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <ComparePane label="Before" url={item.beforeUrl} name={item.name} width={item.width} height={item.height} zoom={zoom} />
-          <ComparePane label="After" url={item.afterUrl} name={item.name} width={item.width} height={item.height} zoom={zoom} />
+          <ComparePane label="Before" url={item.beforeUrl} name={item.displayName} width={item.width} height={item.height} zoom={zoom} />
+          <ComparePane label="After" url={item.afterUrl} name={item.displayName} width={item.width} height={item.height} zoom={zoom} />
         </div>
       ) : null}
     </li>

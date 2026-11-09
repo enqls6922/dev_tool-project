@@ -67,8 +67,9 @@ test("cleanGhostPixels ignores a short trailing channel", () => {
 
 test("sprite names stay readable and unique", () => {
   assert.equal(toSpriteName("Hero Attack.png"), "Hero_Attack");
-  assert.equal(toSpriteName("주인공.png"), "주인공");
+  assert.equal(toSpriteName("주인공.png"), "sprite");
   assert.equal(toSpriteName(".png"), "sprite");
+  assert.equal(toSpriteName(`hero"; System.Console.WriteLine("x").png`), "hero_System_Console_WriteLine_x");
   assert.deepEqual(uniqueSpriteNames(["slime", "slime", "bat", "slime"]), [
     "slime",
     "slime_2",
@@ -134,6 +135,8 @@ test("a single tile does not grow by the padding gutter", () => {
 
 test("unity importer flips top-left json into bottom-left sprite rects", () => {
   const script = generateUnityImporterScript();
+  assert.equal(script, generateUnityImporterScript());
+  assert.doesNotMatch(script, /\$\{/);
   assert.match(script, /MenuItem\("Tools\/SpriteForge\/Slice Selected Atlas"\)/);
   assert.match(script, /atlasData\.height - sprite\.y - sprite\.height/);
   assert.match(script, /JsonUtility\.FromJson<AtlasFile>/);
@@ -225,4 +228,23 @@ test("original tile size is written as 0 so Unity falls back to 32 pixels per un
   assert.equal(document.forcePowerOfTwo, true);
   assert.equal(document.width, 32);
   assert.equal(document.height, 64);
+});
+
+test("atlas metadata keeps hostile sprite names out of the static importer", () => {
+  const injected = `hero"; System.Diagnostics.Process.Start("calc")`;
+  const document = buildAtlasDocument(
+    {
+      canvas: {} as HTMLCanvasElement,
+      width: 16,
+      height: 16,
+      fill: 1,
+      sprites: [{ name: injected, x: 0, y: 0, width: 8, height: 8 }],
+    },
+    DEFAULT_SETTINGS,
+  );
+  const script = generateUnityImporterScript();
+  assert.equal(document.sprites[0]?.name, "hero_System_Diagnostics_Process_Start_calc");
+  assert.doesNotMatch(script, /Process\.Start/);
+  assert.doesNotMatch(script, /hero"/);
+  assert.equal(JSON.parse(JSON.stringify(document)).sprites[0].name, document.sprites[0]?.name);
 });
