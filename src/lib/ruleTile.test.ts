@@ -139,7 +139,7 @@ test("PixelLab Wang 5x8 binds the fixed index table", () => {
   assert.equal(data.rows, 8);
   assert.equal(data.doubleHeight, false);
   assert.equal(data.cells.length, 40);
-  assert.equal(data.rules.length, 20);
+  assert.equal(data.rules.length, 14);
   assert.equal(WANG_TALL_FLOOR_INDEX, 16);
   assert.equal(WANG_5X8_INDEX.floor, 16);
   assert.equal(WANG_5X8_INDEX.defaultSprite, 16);
@@ -158,7 +158,7 @@ test("PixelLab Wang 5x8 binds the fixed index table", () => {
     21: "남서 안쪽 코너",
     22: "남동 안쪽 코너",
     25: "남서 외곽 코너",
-    26: "남쪽 하단 바닥경계",
+    26: "남쪽 하단 바닥",
     28: "남동 외곽 코너",
   };
   for (const [indexText, label] of Object.entries(labeled)) {
@@ -185,22 +185,86 @@ test("PixelLab Wang 5x8 binds the fixed index table", () => {
   assert.equal(wangIsWallHalf(15, true), false);
   assert.equal(wangIsWallHalf(16, true), false);
 
-  let previous = Infinity;
-  const seen = new Set<string>();
+  const order = [
+    "inner_nw",
+    "inner_ne",
+    "inner_sw",
+    "inner_se",
+    "outer_nw",
+    "outer_ne",
+    "outer_sw",
+    "outer_se",
+    "north",
+    "south",
+    "west",
+    "east",
+    "floor",
+    "single",
+  ];
+  assert.deepEqual(data.rules.map((rule) => rule.name), order);
+  assert.deepEqual(data.rules.map((rule) => rule.index), [
+    11, 12, 21, 22, 0, 2, 25, 28, 1, 26, 15, 18, 16, 6,
+  ]);
+  assert.equal(new Set(data.rules.map((rule) => rule.index)).size, data.rules.length);
+  const outerBeforeEdge = data.rules.findIndex((rule) => rule.name === "outer_nw");
+  const edgeAt = data.rules.findIndex((rule) => rule.name === "north");
+  assert.ok(outerBeforeEdge >= 0 && outerBeforeEdge < edgeAt);
   for (const rule of data.rules) {
-    const weight = countCondition(rule.neighbors, 1) * 10 + countCondition(rule.neighbors, 2);
-    assert.ok(weight <= previous);
-    previous = weight;
-    assert.equal(seen.has(rule.name), false);
-    seen.add(rule.name);
     assert.equal(isWang5x8Black(rule.index), false);
     if (rule.index === 0 || rule.index === 1 || rule.index === 2) {
       assert.equal(rule.neighbors.Top, 2);
     }
   }
-  assert.equal(data.rules[0]?.name, "floor");
-  assert.equal(data.rules[0]?.index, 16);
-  assert.equal(countCondition(data.rules[0].neighbors, 1), 8);
+  const byName = Object.fromEntries(data.rules.map((rule) => [rule.name, rule.neighbors]));
+  assert.equal(byName.inner_nw?.Right, 1);
+  assert.equal(byName.inner_nw?.Bottom, 1);
+  assert.equal(byName.inner_nw?.BottomRight, 1);
+  assert.equal(byName.inner_nw?.TopLeft, 2);
+  assert.equal(byName.inner_ne?.Left, 1);
+  assert.equal(byName.inner_ne?.Bottom, 1);
+  assert.equal(byName.inner_ne?.BottomLeft, 1);
+  assert.equal(byName.inner_ne?.TopRight, 2);
+  assert.equal(byName.inner_sw?.Right, 1);
+  assert.equal(byName.inner_sw?.Top, 1);
+  assert.equal(byName.inner_sw?.TopRight, 1);
+  assert.equal(byName.inner_sw?.BottomLeft, 2);
+  assert.equal(byName.inner_se?.Left, 1);
+  assert.equal(byName.inner_se?.Top, 1);
+  assert.equal(byName.inner_se?.TopLeft, 1);
+  assert.equal(byName.inner_se?.BottomRight, 2);
+  assert.deepEqual(byName.outer_nw, {
+    Top: 2, Bottom: 1, Left: 2, Right: 1, TopLeft: 0, TopRight: 0, BottomLeft: 0, BottomRight: 0,
+  });
+  assert.deepEqual(byName.outer_ne, {
+    Top: 2, Bottom: 1, Left: 1, Right: 2, TopLeft: 0, TopRight: 0, BottomLeft: 0, BottomRight: 0,
+  });
+  assert.deepEqual(byName.outer_sw, {
+    Top: 1, Bottom: 2, Left: 2, Right: 1, TopLeft: 0, TopRight: 0, BottomLeft: 0, BottomRight: 0,
+  });
+  assert.deepEqual(byName.outer_se, {
+    Top: 1, Bottom: 2, Left: 1, Right: 2, TopLeft: 0, TopRight: 0, BottomLeft: 0, BottomRight: 0,
+  });
+  assert.deepEqual(byName.north, {
+    Top: 2, Bottom: 1, Left: 0, Right: 0, TopLeft: 0, TopRight: 0, BottomLeft: 0, BottomRight: 0,
+  });
+  assert.deepEqual(byName.south, {
+    Top: 1, Bottom: 2, Left: 0, Right: 0, TopLeft: 0, TopRight: 0, BottomLeft: 0, BottomRight: 0,
+  });
+  assert.deepEqual(byName.west, {
+    Top: 0, Bottom: 0, Left: 2, Right: 1, TopLeft: 0, TopRight: 0, BottomLeft: 0, BottomRight: 0,
+  });
+  assert.deepEqual(byName.east, {
+    Top: 0, Bottom: 0, Left: 1, Right: 2, TopLeft: 0, TopRight: 0, BottomLeft: 0, BottomRight: 0,
+  });
+  assert.equal(countCondition(byName.floor, 1), 8);
+  assert.equal(byName.single?.Top, 2);
+  assert.equal(byName.single?.Bottom, 2);
+  assert.equal(byName.single?.Left, 2);
+  assert.equal(byName.single?.Right, 2);
+  const cornerThatAlsoMatchesNorth = {
+    Top: 2, Bottom: 1, Left: 2, Right: 1, TopLeft: 2, TopRight: 2, BottomLeft: 2, BottomRight: 1,
+  } satisfies Neighbors;
+  assert.equal(firstMatchingRule(data.rules, cornerThatAlsoMatchesNorth), 0);
   const json = JSON.stringify(data);
   assert.match(json, /"doubleHeight":false/);
   assert.match(json, /"columns":5/);
@@ -259,13 +323,13 @@ test("Wang 5x8 neighbourhoods stay on the fixed sprites", () => {
     if (cardinals === 4 && missingDiagonal >= 2) assert.equal(resolved.index, 16);
     if (cardinals === 0) assert.equal(resolved.index, 6);
     const hit = firstMatchingRule(wang.rules, actual);
-    if (cardinals === 4 && missingDiagonal >= 2) {
-      assert.equal(hit, null);
+    if (hit === null) {
       assert.equal(resolved.index, wang.defaultSpriteIndex);
     } else {
       assert.equal(hit, resolved.index);
       assert.equal(wangMatchingIndex(actual, true), resolved.index);
     }
+    if (cardinals === 4 && missingDiagonal >= 2) assert.equal(hit, null);
   }
 
   assert.equal(wangResolve(actualFromCornerMask(15), true).index, 16);
@@ -280,6 +344,11 @@ test("Wang 5x8 neighbourhoods stay on the fixed sprites", () => {
     Top: 2, Bottom: 1, Left: 1, Right: 1, TopLeft: 2, TopRight: 2, BottomLeft: 1, BottomRight: 1,
   } satisfies Neighbors;
   assert.equal(wangResolve(northEdge, true).index, 1);
+  const corridor = {
+    Top: 2, Bottom: 2, Left: 1, Right: 1, TopLeft: 2, TopRight: 2, BottomLeft: 2, BottomRight: 2,
+  } satisfies Neighbors;
+  assert.equal(firstMatchingRule(wang.rules, corridor), null);
+  assert.equal(wangResolve(corridor, true).index, 16);
 });
 
 test("corner rules resolve the exact mask before any looser subset", () => {
@@ -419,7 +488,7 @@ test("sheet size must match the preset grid", () => {
   assert.equal(extra.data?.cells.length, 45);
   assert.equal(extra.data?.cells[40]?.role, "unmapped");
   assert.equal(extra.data?.cells[40]?.label, "범위 밖");
-  assert.equal(extra.data?.rules.length, 20);
+  assert.equal(extra.data?.rules.length, 14);
   assert.equal(extra.data?.defaultSpriteIndex, 16);
 });
 
