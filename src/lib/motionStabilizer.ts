@@ -1,3 +1,4 @@
+import { sanitizeSpriteName } from "./fileNames.ts";
 import type { OpaqueBounds } from "./imageProcessor";
 
 /**
@@ -279,7 +280,7 @@ export function buildMotionDocument(
     padding: layout.padding,
     yOffset: layout.yOffset,
     frames: names.map((name, index) => ({
-      name,
+      name: sanitizeSpriteName(name),
       index,
       x: index * layout.tileWidth,
       y: 0,

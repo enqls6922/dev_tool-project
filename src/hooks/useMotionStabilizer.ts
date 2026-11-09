@@ -5,13 +5,12 @@ import { canvasToPngBlob } from "@/lib/exportPack";
 import { downloadMotionJson, downloadMotionPng } from "@/lib/exportMotion";
 import {
   drawImageToCanvas,
-  isPngFile,
   loadImage,
-  MAX_IMAGE_EDGE,
   toSpriteName,
   uniqueSpriteNames,
   type OpaqueBounds,
 } from "@/lib/imageProcessor";
+import { acceptRasterUploads, PIXEL_ART_LIMIT_MESSAGE } from "@/lib/uploadSecurity";
 import {
   buildMotionDocument,
   compareFileNames,
@@ -50,9 +49,6 @@ async function decodeFrame(file: File): Promise<MotionFrame> {
   const name = toSpriteName(file.name);
   try {
     const image = await loadImage(file);
-    if (image.naturalWidth > MAX_IMAGE_EDGE || image.naturalHeight > MAX_IMAGE_EDGE) {
-      throw new Error(`한 변이 ${MAX_IMAGE_EDGE}px를 넘습니다.`);
-    }
     if (image.naturalWidth < 1 || image.naturalHeight < 1) {
       throw new Error("이미지 크기가 없습니다.");
     }
@@ -154,19 +150,10 @@ export function useMotionStabilizer(active: boolean) {
   }, [active, playing, fps, playable.length]);
 
   async function ingest(files: File[], generation: number) {
-    const accepted = files.filter((file) => isPngFile(file));
-    const rejected = files.filter((file) => !isPngFile(file));
+    const { accepted, message } = acceptRasterUploads(files);
     if (!mountedRef.current || generation !== generationRef.current) return;
-    if (rejected.length > 0) {
-      const sample = rejected
-        .slice(0, 4)
-        .map((file) => file.name || "unnamed")
-        .join(", ");
-      const extra = rejected.length > 4 ? ` 외 ${rejected.length - 4}개` : "";
-      setNotice(`PNG가 아니라 건너뛰었습니다: ${sample}${extra}`);
-    } else if (accepted.length > 0) {
-      setNotice(null);
-    }
+    if (message) setNotice(message);
+    else if (accepted.length > 0) setNotice(null);
     if (accepted.length === 0) return;
 
     setBusy(true);
@@ -176,6 +163,7 @@ export function useMotionStabilizer(active: boolean) {
       if (!file) continue;
       setProgress(`읽는 중 ${index + 1} / ${accepted.length}`);
       const frame = await decodeFrame(file);
+      if (frame.message === PIXEL_ART_LIMIT_MESSAGE) setNotice(PIXEL_ART_LIMIT_MESSAGE);
       if (!mountedRef.current || generation !== generationRef.current) {
         release(frame);
         return;

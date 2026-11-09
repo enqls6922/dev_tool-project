@@ -132,7 +132,7 @@ export function RuleTileForge() {
 
           <DropZone
             multiple={false}
-            title="타일셋 PNG를 떨어뜨리거나 클릭"
+            title="타일셋 PNG, JPG, WebP를 떨어뜨리거나 클릭"
             hint="시트 한 장만 올립니다. 칸 나누기와 RuleData.json은 이 브라우저에서 만듭니다."
             onFiles={(files) => {
               setActiveIndex(null);

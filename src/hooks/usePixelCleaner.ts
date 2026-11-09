@@ -2,19 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import { downloadCleanedPng, downloadCleanedZip } from "@/lib/exportCleaned";
-import { uniqueFileNames } from "@/lib/fileNames";
+import { toPngDownloadName, uniqueFileNames } from "@/lib/fileNames";
 import { canvasToPngBlob } from "@/lib/exportPack";
 import {
-  MAX_IMAGE_EDGE,
   cleanCanvasGhostPixels,
   drawImageToCanvas,
-  isPngFile,
   loadImage,
 } from "@/lib/imageProcessor";
+import { acceptRasterUploads, PIXEL_ART_LIMIT_MESSAGE } from "@/lib/uploadSecurity";
 
 export type CleanerItem = {
   id: string;
   name: string;
+  displayName: string;
   status: "ready" | "error";
   message?: string;
   width?: number;
@@ -52,18 +52,9 @@ export function usePixelCleaner() {
   }, []);
 
   async function addFiles(files: File[]) {
-    const accepted = files.filter((file) => isPngFile(file));
-    const rejected = files.filter((file) => !isPngFile(file));
-    if (rejected.length > 0) {
-      const sample = rejected
-        .slice(0, 4)
-        .map((file) => file.name || "unnamed")
-        .join(", ");
-      const extra = rejected.length > 4 ? ` 외 ${rejected.length - 4}개` : "";
-      setNotice(`PNG가 아니라 건너뛰었습니다: ${sample}${extra}`);
-    } else {
-      setNotice(null);
-    }
+    const { accepted, message } = acceptRasterUploads(files);
+    if (message) setNotice(message);
+    else setNotice(null);
     if (accepted.length === 0) return;
 
     const run = ++runRef.current;
@@ -72,8 +63,10 @@ export function usePixelCleaner() {
     for (let index = 0; index < accepted.length; index += 1) {
       if (!mountedRef.current || run !== runRef.current) return;
       const file = accepted[index];
+      if (!file) continue;
       setProgress(`청소 ${index + 1} / ${accepted.length}`);
       const item = await cleanFile(file);
+      if (item.message === PIXEL_ART_LIMIT_MESSAGE) setNotice(PIXEL_ART_LIMIT_MESSAGE);
       if (!mountedRef.current || run !== runRef.current) {
         if (item.beforeUrl) URL.revokeObjectURL(item.beforeUrl);
         if (item.afterUrl) URL.revokeObjectURL(item.afterUrl);
@@ -122,7 +115,7 @@ export function usePixelCleaner() {
     if (ready.length === 0 || zipping) return;
     setZipping(true);
     try {
-      const names = uniqueFileNames(ready.map((item) => item.name));
+      const names = uniqueFileNames(ready.map((item) => toPngDownloadName(item.name)));
       await downloadCleanedZip(
         ready.map((item, index) => ({
           name: names[index] ?? item.name,
@@ -157,18 +150,17 @@ export function usePixelCleaner() {
 
 async function cleanFile(file: File): Promise<CleanerItem> {
   const id = crypto.randomUUID();
-  const name = file.name || "image.png";
+  const displayName = file.name || "image.png";
+  const name = toPngDownloadName(displayName);
   try {
     const image = await loadImage(file);
-    if (image.naturalWidth > MAX_IMAGE_EDGE || image.naturalHeight > MAX_IMAGE_EDGE) {
-      throw new Error(`한 변이 ${MAX_IMAGE_EDGE}px를 넘습니다.`);
-    }
     const canvas = drawImageToCanvas(image, image.naturalWidth, image.naturalHeight);
     const removed = cleanCanvasGhostPixels(canvas);
     const afterBlob = await canvasToPngBlob(canvas);
     return {
       id,
       name,
+      displayName,
       status: "ready",
       width: image.naturalWidth,
       height: image.naturalHeight,
@@ -181,6 +173,7 @@ async function cleanFile(file: File): Promise<CleanerItem> {
     return {
       id,
       name,
+      displayName,
       status: "error",
       message: caught instanceof Error ? caught.message : "이 파일을 읽지 못했습니다.",
     };

@@ -1,4 +1,14 @@
 import potpack, { type PotpackBox } from "potpack";
+import { sanitizeFilename, sanitizeSpriteName } from "./fileNames.ts";
+import { staticScript } from "./scriptSafety.ts";
+import {
+  assertPixelArtEdge,
+  FILE_TOO_LARGE_MESSAGE,
+  looksLikeActiveContent,
+  MAX_UPLOAD_BYTES,
+  readRasterDimensions,
+  REJECTED_FILE_MESSAGE,
+} from "./uploadSecurity.ts";
 import type { AtlasDocument, PackResult, PackSettings, SpriteRect } from "./types";
 
 export const MAX_IMAGE_EDGE = 8192;
@@ -48,14 +58,9 @@ export function isPngFile(file: File): boolean {
 }
 
 export function toSpriteName(fileName: string): string {
-  const base = fileName.replace(/\.[^.]+$/, "").normalize("NFKC");
-  const cleaned = base
-    .replace(/[\\/:*?"<>|#]/g, "_")
-    .replace(/\s+/g, "_")
-    .replace(/_+/g, "_")
-    .replace(/^_+|_+$/g, "");
-  const clipped = cleaned.slice(0, 80);
-  return clipped.length > 0 ? clipped : "sprite";
+  const base = fileName.replace(/\\/g, "/").split("/").pop() ?? fileName;
+  const stem = base.replace(/\.[^.]+$/, "");
+  return sanitizeSpriteName(stem);
 }
 
 export function uniqueSpriteNames(names: readonly string[]): string[] {
@@ -132,6 +137,7 @@ function requireContext(
 }
 
 export function drawImageToCanvas(image: CanvasImageSource, width: number, height: number): HTMLCanvasElement {
+  assertPixelArtEdge(width, height);
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, width);
   canvas.height = Math.max(1, height);
@@ -151,7 +157,23 @@ export function cleanCanvasGhostPixels(canvas: HTMLCanvasElement): number {
   return cleared;
 }
 
-export function loadImage(file: File): Promise<HTMLImageElement> {
+export async function loadImage(file: File): Promise<HTMLImageElement> {
+  if (file.size > MAX_UPLOAD_BYTES) {
+    throw new Error(FILE_TOO_LARGE_MESSAGE);
+  }
+  const header = new Uint8Array(await file.slice(0, file.size).arrayBuffer());
+  if (looksLikeActiveContent(header)) {
+    throw new Error(REJECTED_FILE_MESSAGE);
+  }
+  const sniffed = readRasterDimensions(header);
+  if (sniffed) assertPixelArtEdge(sniffed.width, sniffed.height);
+
+  const image = await decodeImageElement(file);
+  assertPixelArtEdge(image.naturalWidth, image.naturalHeight);
+  return image;
+}
+
+function decodeImageElement(file: File): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const image = new Image();
@@ -162,7 +184,7 @@ export function loadImage(file: File): Promise<HTMLImageElement> {
     };
     image.onerror = () => {
       URL.revokeObjectURL(url);
-      reject(new Error(`${file.name} 을(를) PNG로 디코딩하지 못했습니다.`));
+      reject(new Error(`${sanitizeFilename(file.name, "image")} 을(를) 이미지로 디코딩하지 못했습니다.`));
     };
     image.src = url;
   });
@@ -261,9 +283,7 @@ export type NormalizedSprite = {
 
 export async function normalizeSprite(file: File, settings: PackSettings): Promise<NormalizedSprite> {
   const image = await loadImage(file);
-  if (image.naturalWidth > MAX_IMAGE_EDGE || image.naturalHeight > MAX_IMAGE_EDGE) {
-    throw new Error(`한 변이 ${MAX_IMAGE_EDGE}px를 넘습니다.`);
-  }
+  assertPixelArtEdge(image.naturalWidth, image.naturalHeight);
 
   const surface = rasterize(image, settings.cleanGhostPixels);
   const sourceWidth = image.naturalWidth;
@@ -435,7 +455,7 @@ export function buildAtlasDocument(pack: PackResult, settings: PackSettings): At
     pixelated: settings.pixelated,
     forcePowerOfTwo: settings.forcePowerOfTwo,
     sprites: pack.sprites.map(({ name, x, y, width, height }) => ({
-      name,
+      name: sanitizeSpriteName(name),
       x,
       y,
       width,
@@ -450,7 +470,7 @@ export function buildAtlasDocument(pack: PackResult, settings: PackSettings): At
  * Requires Unity 2021.2 or newer.
  */
 export function generateUnityImporterScript(): string {
-  return `// SpriteForge — drop this file in an Editor folder (the zip already does).
+  return staticScript`// SpriteForge — drop this file in an Editor folder (the zip already does).
 // Select Atlas.png, then run Tools/SpriteForge/Slice Selected Atlas.
 // Requires Unity 2021.2+.
 #if UNITY_EDITOR

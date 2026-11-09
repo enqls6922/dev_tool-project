@@ -1,7 +1,8 @@
 import { saveAs } from "file-saver";
 import JSZip from "jszip";
-import type { AtlasDocument } from "./types";
 import { generateUnityImporterScript } from "./imageProcessor";
+import { serializeMetadata } from "./scriptSafety.ts";
+import type { AtlasDocument } from "./types";
 
 export function canvasToPngBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
@@ -19,7 +20,7 @@ export async function downloadSpritePack(canvas: HTMLCanvasElement, document: At
   const zip = new JSZip();
   const png = await canvasToPngBlob(canvas);
   zip.file("Atlas.png", png);
-  zip.file("Atlas.json", `${JSON.stringify(document, null, 2)}\n`);
+  zip.file("Atlas.json", serializeMetadata(document));
   zip.file("Editor/SpriteSheetImporter.cs", generateUnityImporterScript());
   const blob = await zip.generateAsync({
     type: "blob",

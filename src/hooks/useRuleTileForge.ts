@@ -4,12 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { canvasToPngBlob } from "@/lib/exportPack";
 import { downloadRuleTilePack } from "@/lib/exportRuleTile";
 import {
-  MAX_IMAGE_EDGE,
   cleanCanvasGhostPixels,
   drawImageToCanvas,
-  isPngFile,
   loadImage,
 } from "@/lib/imageProcessor";
+import { acceptRasterUploads } from "@/lib/uploadSecurity";
 import {
   analyzeSheet,
   type RulePreset,
@@ -72,9 +71,6 @@ export function useRuleTileForge() {
       if (!mountedRef.current || run !== runRef.current) return;
       const width = image.naturalWidth;
       const height = image.naturalHeight;
-      if (width > MAX_IMAGE_EDGE || height > MAX_IMAGE_EDGE) {
-        throw new Error(`한 변이 ${MAX_IMAGE_EDGE}px를 넘습니다.`);
-      }
 
       let blob: Blob = source;
       let removed: number | null = null;
@@ -113,17 +109,19 @@ export function useRuleTileForge() {
   }
 
   function addFiles(files: File[]) {
-    const pngs = files.filter((item) => isPngFile(item));
-    if (pngs.length === 0) {
-      setNotice("PNG만 올릴 수 있습니다.");
+    const { accepted, message } = acceptRasterUploads(files);
+    if (accepted.length === 0) {
+      setNotice(message ?? "PNG, JPG, WebP만 올릴 수 있습니다.");
       return;
     }
-    if (pngs.length > 1 || pngs.length !== files.length) {
-      setNotice("타일셋 PNG 한 장만 사용합니다. 첫 번째 PNG를 골랐습니다.");
+    if (accepted.length > 1 || message) {
+      const picked = "타일셋 이미지 한 장만 사용합니다. 첫 번째 파일을 골랐습니다.";
+      setNotice(message ? `${message} ${picked}` : picked);
     } else {
       setNotice(null);
     }
-    const next = pngs[0];
+    const next = accepted[0];
+    if (!next) return;
     fileRef.current = next;
     setFile(next);
     void renderSheet(next, cleanRef.current);
