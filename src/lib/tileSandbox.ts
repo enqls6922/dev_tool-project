@@ -2,6 +2,7 @@ import {
   godotSourceRect,
   pixelLabSourceRect,
   pixelLabTileIndex,
+  wangNorthPillarOverlay,
   wangRectForIndex,
   wangResolve,
   type FifteenShape,
@@ -103,6 +104,39 @@ export function cellNeighbors(
 function sheetIndexForMask(mask: number, layout: Exclude<SandboxLayout, { kind: "wang" }>): number {
   if (layout.kind === "godot") return godotSourceRect(mask, 1).index;
   return pixelLabTileIndex(mask, layout.shape);
+}
+
+/**
+ * Pillar sprite drawn on an empty cell when the painted cell below is a north lip
+ * (tile_10, tile_11, or tile_12). The lip itself stays the terrain sprite.
+ */
+export function sandboxPillarOverlayIndex(
+  cells: readonly number[],
+  x: number,
+  y: number,
+  size = SANDBOX_SIZE,
+  layout: SandboxLayout = FIFTEEN_LAYOUT,
+): number | null {
+  if (layout.kind !== "wang" || !layout.tall) return null;
+  if (x < 0 || y < 0 || x >= size || y >= size) return null;
+  if (cells[y * size + x] === 1) return null;
+  if (y + 1 >= size) return null;
+  const below = sandboxTileIndex(cells, x, y + 1, size, layout);
+  if (below === null) return null;
+  return wangNorthPillarOverlay(below);
+}
+
+export function sandboxPillarOverlayRect(
+  cells: readonly number[],
+  x: number,
+  y: number,
+  tileSize: number,
+  size = SANDBOX_SIZE,
+  layout: SandboxLayout = FIFTEEN_LAYOUT,
+) {
+  const index = sandboxPillarOverlayIndex(cells, x, y, size, layout);
+  if (index === null) return null;
+  return wangRectForIndex(index, tileSize);
 }
 
 /** Filled cells map 1:1 onto the active PixelLab sheet. Empty cells draw nothing. */

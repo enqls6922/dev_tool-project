@@ -7,6 +7,7 @@ import {
   SANDBOX_SIZE,
   emptySandbox,
   paintCell,
+  sandboxPillarOverlayRect,
   sandboxSourceRect,
   type SandboxLayout,
 } from "@/lib/tileSandbox";
@@ -79,26 +80,29 @@ export function TileSandbox({ previewUrl, tileSize, canSample, layout }: Props) 
         const dy = y * SANDBOX_CELL_PX;
         context.fillStyle = (x + y) % 2 === 0 ? "#141820" : "#1b2230";
         context.fillRect(dx, dy, SANDBOX_CELL_PX, SANDBOX_CELL_PX);
+        const overlay = sandboxPillarOverlayRect(grid, x, y, tileSize, SANDBOX_SIZE, layout);
         const sample = sandboxSourceRect(grid, x, y, tileSize, SANDBOX_SIZE, layout);
-        if (sample) {
+        const drawn = sample ?? overlay;
+        if (drawn) {
           if (image && image.complete && image.naturalWidth > 0) {
             context.drawImage(
               image,
-              sample.x,
-              sample.y,
-              sample.width,
-              sample.height,
+              drawn.x,
+              drawn.y,
+              drawn.width,
+              drawn.height,
               dx,
               dy,
               SANDBOX_CELL_PX,
               SANDBOX_CELL_PX,
             );
           } else {
-            context.fillStyle = MASK_COLORS[sample.mask & 15] ?? "#ece7df";
+            const swatch = sample ? sample.mask & 15 : drawn.index & 15;
+            context.fillStyle = MASK_COLORS[swatch] ?? "#ece7df";
             context.fillRect(dx + 1, dy + 1, SANDBOX_CELL_PX - 2, SANDBOX_CELL_PX - 2);
             context.fillStyle = "#101318";
             context.font = "11px ui-monospace, monospace";
-            context.fillText(String(sample.index), dx + 4, dy + 14);
+            context.fillText(String(drawn.index), dx + 4, dy + 14);
           }
         }
         context.strokeStyle = "rgba(255,255,255,0.14)";
@@ -130,6 +134,9 @@ export function TileSandbox({ previewUrl, tileSize, canSample, layout }: Props) 
   const hoverSample = hover
     ? sandboxSourceRect(cells, hover.x, hover.y, tileSize, SANDBOX_SIZE, layout)
     : null;
+  const hoverOverlay = hover && hoverSample === null
+    ? sandboxPillarOverlayRect(cells, hover.x, hover.y, tileSize, SANDBOX_SIZE, layout)
+    : null;
 
   return (
     <section className="rounded-2xl border border-[#2a3140] bg-[#13171f]/95 p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)]">
@@ -137,7 +144,7 @@ export function TileSandbox({ previewUrl, tileSize, canSample, layout }: Props) 
         <div>
           <h2 className="text-sm font-semibold text-[#ece7df]">실시간 붓칠 샌드박스</h2>
           <p className="mt-1 text-xs leading-5 text-[#9aa3b5]">
-            8×8 칸, 각 32px. 좌클릭은 채우고 우클릭은 지웁니다. Wang 5×8은 8방향을 검사해 내부는 tile_16, 외곽은 지정된 테두리 타일만 그립니다.
+            8×8 칸, 각 32px. 좌클릭은 채우고 우클릭은 지웁니다. Wang 5×8은 8방향을 검사하고, 북쪽 테두리 위 빈칸에는 기둥 벽을 함께 그립니다.
           </p>
         </div>
         <div className="flex flex-wrap gap-1.5" role="toolbar" aria-label="샌드박스 도구">
@@ -218,11 +225,17 @@ export function TileSandbox({ previewUrl, tileSize, canSample, layout }: Props) 
 
       <p className="mt-2 font-mono text-[11px] text-[#9aa3b5]" role="status">
         {hover
-          ? `(${hover.x}, ${hover.y}) · ${hoverSample === null ? "비어 있음" : `마스크 ${hoverSample.mask} · 타일 ${hoverSample.index}`}`
+          ? `(${hover.x}, ${hover.y}) · ${
+            hoverSample
+              ? `마스크 ${hoverSample.mask} · 타일 ${hoverSample.index}`
+              : hoverOverlay
+                ? `기둥 오버레이 · 타일 ${hoverOverlay.index}`
+                : "비어 있음"
+          }`
           : canSample
             ? layout.kind === "wang"
               ? layout.tall
-                ? "Wang 5×8은 이웃 8칸을 검사합니다. 사방이 막힌 바닥은 tile_16, 외곽은 tile_00·01·02·15·18·25·26·28, 고립은 tile_06입니다."
+                ? "Wang 5×8은 이웃 8칸을 검사합니다. 내부는 tile_16, 북쪽 tile_11, 남쪽 tile_21, 서쪽 tile_15, 동쪽 tile_17, 외곽 코너 tile_10·12·20·22, 고립은 tile_13입니다. 북쪽 테두리 위 빈칸은 tile_05·06·07입니다."
                 : "Wang 5×4는 인덱스 = 코너 마스크입니다. 내부 바닥은 tile_15입니다."
               : layout.kind === "godot"
                 ? "PixelLab Godot (47-Blob) 12×4 칸을 8방향 이웃과 같은 픽셀 좌표로 그립니다."

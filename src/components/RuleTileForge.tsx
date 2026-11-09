@@ -161,7 +161,7 @@ export function RuleTileForge() {
             onSelect={setActiveIndex}
             summary={
               data
-                ? `룰 ${data.rules.length}개 · 기본 스프라이트 ${data.cells.find((cell) => cell.index === data.defaultSpriteIndex)?.sprite ?? ""} · ${data.preset === "wang" && data.rows >= 8 ? "안쪽 코너, 외곽 코너, 직선 벽, 바닥, 고립 순으로 검사" : "조건이 많은 룰부터 검사"}`
+                ? `룰 ${data.rules.length}개 · 기본 스프라이트 ${data.cells.find((cell) => cell.index === data.defaultSpriteIndex)?.sprite ?? ""} · ${data.preset === "wang" && data.rows >= 8 ? "좁은 통로, 외곽 코너, 직선 테두리, 안쪽 코너, 바닥 순으로 검사" : "조건이 많은 룰부터 검사"}`
                 : "시트가 프리셋과 맞으면 8방향 조건이 여기에 나옵니다."
             }
           />

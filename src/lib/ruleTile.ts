@@ -67,7 +67,7 @@ export const PRESET_INFO: Record<RulePreset, PresetInfo> = {
     label: "PixelLab Wang (5×8, 40타일)",
     columns: 5,
     rows: 8,
-    hint: "5×8(160×256, 32px, 40칸)은 고정 인덱스입니다. 내부 바닥과 기본 스프라이트는 tile_16, 북쪽 tile_01, 남쪽 tile_26, 서쪽 tile_15, 동쪽 tile_18, 외곽 코너 tile_00·02·25·28, 안쪽 코너 tile_11·12·21·22, 고립 tile_06입니다. 31–34와 36–39는 검은 빈칸이라 룰에 쓰지 않습니다. 5×4는 인덱스 = NW + 2·NE + 4·SW + 8·SE 입니다.",
+    hint: "5×8(160×256, 32px, 40칸)은 고정 인덱스입니다. 기본 스프라이트와 내부 바닥은 tile_16, 북쪽 tile_11, 남쪽 tile_21, 서쪽 tile_15, 동쪽 tile_17, 외곽 코너 tile_10·12·20·22, 안쪽 코너 tile_24·23·29·28, 고립과 세로 통로 하단은 tile_13, 세로 통로는 tile_08·03입니다. 31–34와 36–39는 빈칸이라 룰에 쓰지 않습니다. 5×4는 인덱스 = NW + 2·NE + 4·SW + 8·SE 입니다.",
   },
 };
 
@@ -151,50 +151,71 @@ export function pixelLabSourceRect(mask: number, tileSize: number, shape: Fiftee
  * isolated default. Indices 16–19 are padding.
  *
  * A 5×8 sheet (160×256 at 32px, 40 cells) does not use that formula.
- * `WANG_5X8_INDEX` is the fixed cell for each role. Indices 31–34 and 36–39
- * are black empty cells and are never rules. tile_00, tile_01, and tile_02
- * are the north pillar caps and are only legal when the north neighbour is empty.
+ * `WANG_5X8_INDEX` is the sheet position of each role. Indices 31–34 and 36–39
+ * are empty cells and are never rules. tile_00–02 and tile_05–07 are the north
+ * wall header and pillar faces. They are drawn as a sandbox overlay, not as rules.
  */
 export const WANG_COLUMNS = 5;
 export const WANG_LOGICAL_ROWS = 4;
 export const WANG_FULL_ROWS = 8;
-/** Full-center stone floor on a 5×8 sheet. Also the default sprite. */
+/** Full-center floor on a 5×8 sheet. Also the default sprite. */
 export const WANG_TALL_FLOOR_INDEX = 16;
 
 /**
- * Fixed 5×8 roles. The floor binding is tile_16.
- * tile_17 is an unused floor variant. tile_21 is the south-west inner corner,
- * not a second full-center rule.
+ * Fixed 5×8 roles. These numbers are the 16668.png cells and must stay put.
+ * Left three columns: header 00–02, pillar 05–07, north lip 10–12,
+ * center floor 15–17, south lip 20–22, outside floor 25–27.
  */
 export const WANG_5X8_INDEX = {
   floor: 16,
   defaultSprite: 16,
-  north: 1,
-  south: 26,
+  north: 11,
+  south: 21,
   west: 15,
-  east: 18,
-  outerNW: 0,
-  outerNE: 2,
-  outerSW: 25,
-  outerSE: 28,
-  innerNW: 11,
-  innerNE: 12,
-  innerSW: 21,
-  innerSE: 22,
-  single: 6,
+  east: 17,
+  outerNW: 10,
+  outerNE: 12,
+  outerSW: 20,
+  outerSE: 22,
+  innerNW: 24,
+  innerNE: 23,
+  innerSW: 29,
+  innerSE: 28,
+  single: 13,
+  corridorNS: 8,
+  corridorNSTop: 3,
+  corridorNSBottom: 13,
 } as const;
 
-/** North pillar caps. Forbidden in the middle of a surrounded floor. */
-export const WANG_5X8_PILLAR_TOPS = [0, 1, 2] as const;
+/**
+ * Sandbox pillar drawn on the empty cell above a north lip.
+ * tile_10 → tile_05, tile_11 → tile_06, tile_12 → tile_07.
+ */
+export const WANG_5X8_PILLAR_OVERLAY = {
+  10: 5,
+  11: 6,
+  12: 7,
+} as const;
 
-/** The only sprites a 5×8 outer border may use. */
-export const WANG_5X8_BORDER = [0, 1, 2, 15, 18, 25, 26, 28] as const;
+/** Sprites a solid 5×8 rectangle may use on its outer border. */
+export const WANG_5X8_BORDER = [10, 11, 12, 15, 17, 20, 21, 22] as const;
 
-/** Black empty cells on the 5×8 sheet. Never a rule sprite. */
+/** Empty cells on the 5×8 sheet. Never a rule sprite. */
 export const WANG_5X8_BLACK = [31, 32, 33, 34, 36, 37, 38, 39] as const;
 
+/** Wall header and pillar faces. Overlay only, never a terrain rule. */
+export const WANG_5X8_WALL_GRAPHICS = [0, 1, 2, 5, 6, 7] as const;
+
 const WANG_5X8_BLACK_SET = new Set<number>(WANG_5X8_BLACK);
-const WANG_5X8_PILLAR_SET = new Set<number>(WANG_5X8_PILLAR_TOPS);
+const WANG_5X8_WALL_SET = new Set<number>(WANG_5X8_WALL_GRAPHICS);
+
+/** Pillar sprite for a north-lip terrain index, or null. */
+export function wangNorthPillarOverlay(index: number): 5 | 6 | 7 | null {
+  if (index === 10) return WANG_5X8_PILLAR_OVERLAY[10];
+  if (index === 11) return WANG_5X8_PILLAR_OVERLAY[11];
+  if (index === 12) return WANG_5X8_PILLAR_OVERLAY[12];
+  return null;
+}
 
 export function isWang5x8Black(index: number): boolean {
   return WANG_5X8_BLACK_SET.has(index);
@@ -730,51 +751,57 @@ function wangFixedSlot(
 }
 
 /**
- * 5×8 rules in check order. Each sprite is registered once.
- * Unity and the sandbox use the first match, so this array is the priority:
- * inner corners, outer corners, straight edges, full floor, then the isolated tile.
- * Do not sort these by condition count. A straight edge names fewer cells than an
- * outer corner, and that sort paints the wall sprite over the corner.
- *
- * An inner corner is one diagonal gap. The mapping's This/NotThis cells are
- * required, and every other neighbour is This. A convex corner fails that check
- * and falls through to the outer-corner rule.
+ * 5×8 rules in check order. Unity and the sandbox use the first match.
+ * Do not sort this array. Narrow corridors, then outer corners, then straight
+ * edges, then a single inner gap, then the full floor.
+ * Cardinals on edges and corners are all specified. An inner corner keeps the
+ * other seven neighbours filled so two gaps fall through to tile_16.
+ * tile_13 is both the isolated cell and the bottom of a 1-wide vertical corridor.
  */
 function wangFixedSlots(): Slot[] {
   const floor = neighborsFromCornerMask(15);
   return [
+    wangFixedSlot(WANG_5X8_INDEX.single, "single", "고립 단독", 0, wangNeighbors({
+      Top: 2, Bottom: 2, Left: 2, Right: 2,
+    })),
+    wangFixedSlot(WANG_5X8_INDEX.corridorNS, "corridor_ns", "세로 1칸 폭 통로", 5, wangNeighbors({
+      Left: 2, Right: 2, Top: 1, Bottom: 1,
+    })),
+    wangFixedSlot(WANG_5X8_INDEX.corridorNSTop, "corridor_ns_top", "세로 1칸 통로 상단", 4, wangNeighbors({
+      Left: 2, Right: 2, Top: 2, Bottom: 1,
+    })),
+    wangFixedSlot(WANG_5X8_INDEX.corridorNSBottom, "corridor_ns_bottom", "세로 1칸 통로 하단", 1, wangNeighbors({
+      Left: 2, Right: 2, Top: 1, Bottom: 2,
+    })),
+    wangFixedSlot(WANG_5X8_INDEX.outerNW, "outer_nw", "북서 외곽 코너", 6, wangNeighbors({
+      Top: 2, Left: 2, Right: 1, Bottom: 1,
+    })),
+    wangFixedSlot(WANG_5X8_INDEX.outerNE, "outer_ne", "북동 외곽 코너", 12, wangNeighbors({
+      Top: 2, Right: 2, Left: 1, Bottom: 1,
+    })),
+    wangFixedSlot(WANG_5X8_INDEX.outerSW, "outer_sw", "남서 외곽 코너", 3, wangNeighbors({
+      Bottom: 2, Left: 2, Right: 1, Top: 1,
+    })),
+    wangFixedSlot(WANG_5X8_INDEX.outerSE, "outer_se", "남동 외곽 코너", 9, wangNeighbors({
+      Bottom: 2, Right: 2, Left: 1, Top: 1,
+    })),
+    wangFixedSlot(WANG_5X8_INDEX.north, "north", "북쪽 상단 테두리", 14, wangNeighbors({
+      Top: 2, Bottom: 1, Left: 1, Right: 1,
+    })),
+    wangFixedSlot(WANG_5X8_INDEX.south, "south", "남쪽 하단 테두리", 11, wangNeighbors({
+      Bottom: 2, Top: 1, Left: 1, Right: 1,
+    })),
+    wangFixedSlot(WANG_5X8_INDEX.west, "west", "서쪽 좌측 테두리", 7, wangNeighbors({
+      Left: 2, Right: 1, Top: 1, Bottom: 1,
+    })),
+    wangFixedSlot(WANG_5X8_INDEX.east, "east", "동쪽 우측 테두리", 13, wangNeighbors({
+      Right: 2, Left: 1, Top: 1, Bottom: 1,
+    })),
     wangFixedSlot(WANG_5X8_INDEX.innerNW, "inner_nw", "북서 안쪽 코너", 15, wangInner("TopLeft")),
     wangFixedSlot(WANG_5X8_INDEX.innerNE, "inner_ne", "북동 안쪽 코너", 15, wangInner("TopRight")),
     wangFixedSlot(WANG_5X8_INDEX.innerSW, "inner_sw", "남서 안쪽 코너", 15, wangInner("BottomLeft")),
     wangFixedSlot(WANG_5X8_INDEX.innerSE, "inner_se", "남동 안쪽 코너", 15, wangInner("BottomRight")),
-    wangFixedSlot(WANG_5X8_INDEX.outerNW, "outer_nw", "북서 외곽 코너", 6, wangNeighbors({
-      Bottom: 1, Right: 1, Top: 2, Left: 2,
-    })),
-    wangFixedSlot(WANG_5X8_INDEX.outerNE, "outer_ne", "북동 외곽 코너", 12, wangNeighbors({
-      Bottom: 1, Left: 1, Top: 2, Right: 2,
-    })),
-    wangFixedSlot(WANG_5X8_INDEX.outerSW, "outer_sw", "남서 외곽 코너", 3, wangNeighbors({
-      Top: 1, Right: 1, Bottom: 2, Left: 2,
-    })),
-    wangFixedSlot(WANG_5X8_INDEX.outerSE, "outer_se", "남동 외곽 코너", 9, wangNeighbors({
-      Top: 1, Left: 1, Bottom: 2, Right: 2,
-    })),
-    wangFixedSlot(WANG_5X8_INDEX.north, "north", "북쪽 상단 벽면", 4, wangNeighbors({
-      Bottom: 1, Top: 2,
-    })),
-    wangFixedSlot(WANG_5X8_INDEX.south, "south", "남쪽 하단 바닥", 1, wangNeighbors({
-      Top: 1, Bottom: 2,
-    })),
-    wangFixedSlot(WANG_5X8_INDEX.west, "west", "서쪽 좌측 세로벽", 2, wangNeighbors({
-      Right: 1, Left: 2,
-    })),
-    wangFixedSlot(WANG_5X8_INDEX.east, "east", "동쪽 우측 세로벽", 8, wangNeighbors({
-      Left: 1, Right: 2,
-    })),
     wangFixedSlot(WANG_5X8_INDEX.floor, "floor", "내부 바닥", 15, floor, true),
-    wangFixedSlot(WANG_5X8_INDEX.single, "single", "고립 단독", 0, wangNeighbors({
-      Top: 2, Bottom: 2, Left: 2, Right: 2,
-    })),
   ];
 }
 
@@ -824,21 +851,22 @@ export function wangMatchingIndex(actual: Neighbors, tall: boolean): number | nu
 
 /**
  * Rule sprite for this neighbourhood.
- * A 5×8 miss is the stone floor. Pillar caps and black cells are rejected.
+ * A 5×8 miss is tile_16. Wall graphics and empty cells are rejected.
  */
 export function wangResolve(actual: Neighbors, tall: boolean): { index: number; mask: number } {
   const rules = orderedRules(wangSlots(tall), tall);
   for (const rule of rules) {
     if (!ruleMatches(rule.neighbors, actual)) continue;
-    return tall ? guardWang5x8Sprite(rule.index, rule.mask, actual) : { index: rule.index, mask: rule.mask };
+    return tall ? guardWang5x8Sprite(rule.index, rule.mask) : { index: rule.index, mask: rule.mask };
   }
   if (tall) return { index: WANG_TALL_FLOOR_INDEX, mask: 15 };
   return { index: 0, mask: 0 };
 }
 
-function guardWang5x8Sprite(index: number, mask: number, actual: Neighbors): { index: number; mask: number } {
-  const pillarInFloor = WANG_5X8_PILLAR_SET.has(index) && actual.Top === 1;
-  if (pillarInFloor || isWang5x8Black(index)) return { index: WANG_TALL_FLOOR_INDEX, mask: 15 };
+function guardWang5x8Sprite(index: number, mask: number): { index: number; mask: number } {
+  if (WANG_5X8_WALL_SET.has(index) || isWang5x8Black(index)) {
+    return { index: WANG_TALL_FLOOR_INDEX, mask: 15 };
+  }
   return { index, mask };
 }
 
@@ -1015,9 +1043,12 @@ export function buildRuleTileScript(): string {
 //
 // RuleData.json neighbor values: 0 = Ignore, 1 = This, 2 = NotThis.
 // Rules are stored in check order. Unity uses the first match, then m_DefaultSprite.
-// A 5x8 Wang sheet has 14 rules, each sprite once, in this order:
-// inner corners, outer corners, straight edges, the full floor, then the single tile.
-// Straight edges name only the facing side. They must stay after the outer corners.
+// A 5x8 Wang sheet checks rules in this fixed order, first match wins:
+// 1. isolated tile and 1-wide vertical corridors
+// 2. outer corners
+// 3. straight edges (all four cardinals specified)
+// 4. one inner diagonal gap
+// 5. full floor. Anything else uses the default sprite, also tile_16.
 // 15-tileset rules mark the three cells around each filled corner as This and leave
 // the rest Ignore, with stricter rules first.
 // PixelLab 15-tileset is 3 columns by 5 rows (indices 0-14). A native 4x4 or 4x8
@@ -1025,18 +1056,17 @@ export function buildRuleTileScript(): string {
 // Wang sheets are 5 columns of square cells. On a 5x4 sheet the index is the mask
 // (NW + 2*NE + 4*SW + 8*SE), so tile 15 is the floor and tile 0 is the default.
 // A 5x8 sheet (160x256, 40 cells) uses the fixed index table below. The builder
-// rebinds those rule names onto these sprites and refuses the black cells.
+// rebinds those rule names onto these sprites and refuses the empty cells.
 //   floor / default sprite          tile_16
-//   north edge                      tile_01
-//   south edge                      tile_26
-//   west edge                       tile_15
-//   east edge                       tile_18
-//   outer NW / NE / SW / SE         tile_00, tile_02, tile_25, tile_28
-//   inner NW / NE / SW / SE         tile_11, tile_12, tile_21, tile_22
-//   single                          tile_06
+//   single / corridor bottom        tile_13
+//   vertical corridor               tile_08
+//   vertical corridor top           tile_03
+//   north / south / west / east     tile_11, tile_21, tile_15, tile_17
+//   outer NW / NE / SW / SE         tile_10, tile_12, tile_20, tile_22
+//   inner NW / NE / SW / SE         tile_24, tile_23, tile_29, tile_28
 //   black, never a rule             tile_31 tile_32 tile_33 tile_34 tile_36 tile_37 tile_38 tile_39
-// tile_00, tile_01, and tile_02 are north pillar caps. Their rules require an
-// empty north neighbour, so they cannot land in the middle of the floor.
+// tile_00, tile_01, tile_02 and tile_05, tile_06, tile_07 are the north wall
+// header and pillar faces. They are not terrain rules.
 // doubleHeight stays false; each rule samples one square cell.
 // Godot 47-blob is the fixed 12x4 3x3-minimal template (47 rules). A cell's pixels
 // are column * tileSize, row * tileSize. A PixelLab Godot download that is 24x8
@@ -1273,19 +1303,22 @@ public static class RuleTileBuilder
         switch (name)
         {
             case "floor": return 16;
-            case "north": return 1;
-            case "south": return 26;
+            case "north": return 11;
+            case "south": return 21;
             case "west": return 15;
-            case "east": return 18;
-            case "outer_nw": return 0;
-            case "outer_ne": return 2;
-            case "outer_sw": return 25;
-            case "outer_se": return 28;
-            case "inner_nw": return 11;
-            case "inner_ne": return 12;
-            case "inner_sw": return 21;
-            case "inner_se": return 22;
-            case "single": return 6;
+            case "east": return 17;
+            case "outer_nw": return 10;
+            case "outer_ne": return 12;
+            case "outer_sw": return 20;
+            case "outer_se": return 22;
+            case "inner_nw": return 24;
+            case "inner_ne": return 23;
+            case "inner_sw": return 29;
+            case "inner_se": return 28;
+            case "single": return 13;
+            case "corridor_ns": return 8;
+            case "corridor_ns_top": return 3;
+            case "corridor_ns_bottom": return 13;
             default: return -1;
         }
     }

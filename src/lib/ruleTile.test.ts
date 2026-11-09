@@ -139,27 +139,29 @@ test("PixelLab Wang 5x8 binds the fixed index table", () => {
   assert.equal(data.rows, 8);
   assert.equal(data.doubleHeight, false);
   assert.equal(data.cells.length, 40);
-  assert.equal(data.rules.length, 14);
+  assert.equal(data.rules.length, 17);
   assert.equal(WANG_TALL_FLOOR_INDEX, 16);
   assert.equal(WANG_5X8_INDEX.floor, 16);
   assert.equal(WANG_5X8_INDEX.defaultSprite, 16);
   assert.equal(data.defaultSpriteIndex, 16);
 
   const labeled: Record<number, string> = {
-    0: "북서 외곽 코너",
-    1: "북쪽 상단 벽면",
-    2: "북동 외곽 코너",
-    6: "고립 단독",
-    11: "북서 안쪽 코너",
-    12: "북동 안쪽 코너",
-    15: "서쪽 좌측 세로벽",
+    3: "세로 1칸 통로 상단",
+    8: "세로 1칸 폭 통로",
+    10: "북서 외곽 코너",
+    11: "북쪽 상단 테두리",
+    12: "북동 외곽 코너",
+    13: "고립 단독",
+    15: "서쪽 좌측 테두리",
     16: "내부 바닥",
-    18: "동쪽 우측 세로벽",
-    21: "남서 안쪽 코너",
-    22: "남동 안쪽 코너",
-    25: "남서 외곽 코너",
-    26: "남쪽 하단 바닥",
-    28: "남동 외곽 코너",
+    17: "동쪽 우측 테두리",
+    20: "남서 외곽 코너",
+    21: "남쪽 하단 테두리",
+    22: "남동 외곽 코너",
+    23: "북동 안쪽 코너",
+    24: "북서 안쪽 코너",
+    28: "남동 안쪽 코너",
+    29: "남서 안쪽 코너",
   };
   for (const [indexText, label] of Object.entries(labeled)) {
     const index = Number(indexText);
@@ -169,11 +171,16 @@ test("PixelLab Wang 5x8 binds the fixed index table", () => {
   }
   assert.equal(data.cells[16]?.fallback, true);
   assert.equal(data.cells[16]?.sprite, "tile_16");
-  assert.equal(data.cells[17]?.role, "unmapped");
-  assert.equal(data.cells[17]?.label, "미사용");
+  assert.equal(data.cells[0]?.role, "unmapped");
+  assert.equal(data.cells[5]?.role, "unmapped");
+  assert.equal(data.cells[18]?.role, "unmapped");
+  assert.equal(data.cells[25]?.role, "unmapped");
+  assert.equal(data.cells[26]?.label, "미사용");
   assert.equal(data.cells[30]?.role, "unmapped");
   assert.equal(data.cells[30]?.label, "미사용");
-  assert.equal(data.rules.some((rule) => rule.index === 17), false);
+  assert.equal(data.rules.some((rule) => rule.index === 0), false);
+  assert.equal(data.rules.some((rule) => rule.index === 5), false);
+  assert.equal(data.rules.some((rule) => rule.index === 18), false);
   assert.equal(data.rules.some((rule) => rule.index === 30), false);
   for (const index of WANG_5X8_BLACK) {
     assert.equal(isWang5x8Black(index), true);
@@ -186,10 +193,10 @@ test("PixelLab Wang 5x8 binds the fixed index table", () => {
   assert.equal(wangIsWallHalf(16, true), false);
 
   const order = [
-    "inner_nw",
-    "inner_ne",
-    "inner_sw",
-    "inner_se",
+    "single",
+    "corridor_ns",
+    "corridor_ns_top",
+    "corridor_ns_bottom",
     "outer_nw",
     "outer_ne",
     "outer_sw",
@@ -198,22 +205,35 @@ test("PixelLab Wang 5x8 binds the fixed index table", () => {
     "south",
     "west",
     "east",
+    "inner_nw",
+    "inner_ne",
+    "inner_sw",
+    "inner_se",
     "floor",
-    "single",
   ];
   assert.deepEqual(data.rules.map((rule) => rule.name), order);
   assert.deepEqual(data.rules.map((rule) => rule.index), [
-    11, 12, 21, 22, 0, 2, 25, 28, 1, 26, 15, 18, 16, 6,
+    13, 8, 3, 13, 10, 12, 20, 22, 11, 21, 15, 17, 24, 23, 29, 28, 16,
   ]);
-  assert.equal(new Set(data.rules.map((rule) => rule.index)).size, data.rules.length);
+  const indexCount = new Map<number, number>();
+  for (const rule of data.rules) {
+    indexCount.set(rule.index, (indexCount.get(rule.index) ?? 0) + 1);
+  }
+  assert.equal(indexCount.get(13), 2);
+  for (const [index, count] of indexCount) {
+    if (index !== 13) assert.equal(count, 1);
+  }
+  const narrowAt = data.rules.findIndex((rule) => rule.name === "corridor_ns");
   const outerBeforeEdge = data.rules.findIndex((rule) => rule.name === "outer_nw");
   const edgeAt = data.rules.findIndex((rule) => rule.name === "north");
-  assert.ok(outerBeforeEdge >= 0 && outerBeforeEdge < edgeAt);
+  const innerAt = data.rules.findIndex((rule) => rule.name === "inner_nw");
+  assert.ok(narrowAt >= 0 && narrowAt < outerBeforeEdge);
+  assert.ok(outerBeforeEdge < edgeAt);
+  assert.ok(edgeAt < innerAt);
   for (const rule of data.rules) {
     assert.equal(isWang5x8Black(rule.index), false);
-    if (rule.index === 0 || rule.index === 1 || rule.index === 2) {
-      assert.equal(rule.neighbors.Top, 2);
-    }
+    assert.equal(rule.index === 0 || rule.index === 1 || rule.index === 2, false);
+    assert.equal(rule.index === 5 || rule.index === 6 || rule.index === 7, false);
   }
   const byName = Object.fromEntries(data.rules.map((rule) => [rule.name, rule.neighbors]));
   assert.equal(byName.inner_nw?.Right, 1);
@@ -245,26 +265,34 @@ test("PixelLab Wang 5x8 binds the fixed index table", () => {
     Top: 1, Bottom: 2, Left: 1, Right: 2, TopLeft: 0, TopRight: 0, BottomLeft: 0, BottomRight: 0,
   });
   assert.deepEqual(byName.north, {
-    Top: 2, Bottom: 1, Left: 0, Right: 0, TopLeft: 0, TopRight: 0, BottomLeft: 0, BottomRight: 0,
+    Top: 2, Bottom: 1, Left: 1, Right: 1, TopLeft: 0, TopRight: 0, BottomLeft: 0, BottomRight: 0,
   });
   assert.deepEqual(byName.south, {
-    Top: 1, Bottom: 2, Left: 0, Right: 0, TopLeft: 0, TopRight: 0, BottomLeft: 0, BottomRight: 0,
+    Top: 1, Bottom: 2, Left: 1, Right: 1, TopLeft: 0, TopRight: 0, BottomLeft: 0, BottomRight: 0,
   });
   assert.deepEqual(byName.west, {
-    Top: 0, Bottom: 0, Left: 2, Right: 1, TopLeft: 0, TopRight: 0, BottomLeft: 0, BottomRight: 0,
+    Top: 1, Bottom: 1, Left: 2, Right: 1, TopLeft: 0, TopRight: 0, BottomLeft: 0, BottomRight: 0,
   });
   assert.deepEqual(byName.east, {
-    Top: 0, Bottom: 0, Left: 1, Right: 2, TopLeft: 0, TopRight: 0, BottomLeft: 0, BottomRight: 0,
+    Top: 1, Bottom: 1, Left: 1, Right: 2, TopLeft: 0, TopRight: 0, BottomLeft: 0, BottomRight: 0,
+  });
+  assert.deepEqual(byName.single, {
+    Top: 2, Bottom: 2, Left: 2, Right: 2, TopLeft: 0, TopRight: 0, BottomLeft: 0, BottomRight: 0,
+  });
+  assert.deepEqual(byName.corridor_ns, {
+    Top: 1, Bottom: 1, Left: 2, Right: 2, TopLeft: 0, TopRight: 0, BottomLeft: 0, BottomRight: 0,
+  });
+  assert.deepEqual(byName.corridor_ns_top, {
+    Top: 2, Bottom: 1, Left: 2, Right: 2, TopLeft: 0, TopRight: 0, BottomLeft: 0, BottomRight: 0,
+  });
+  assert.deepEqual(byName.corridor_ns_bottom, {
+    Top: 1, Bottom: 2, Left: 2, Right: 2, TopLeft: 0, TopRight: 0, BottomLeft: 0, BottomRight: 0,
   });
   assert.equal(countCondition(byName.floor, 1), 8);
-  assert.equal(byName.single?.Top, 2);
-  assert.equal(byName.single?.Bottom, 2);
-  assert.equal(byName.single?.Left, 2);
-  assert.equal(byName.single?.Right, 2);
   const cornerThatAlsoMatchesNorth = {
     Top: 2, Bottom: 1, Left: 2, Right: 1, TopLeft: 2, TopRight: 2, BottomLeft: 2, BottomRight: 1,
   } satisfies Neighbors;
-  assert.equal(firstMatchingRule(data.rules, cornerThatAlsoMatchesNorth), 0);
+  assert.equal(firstMatchingRule(data.rules, cornerThatAlsoMatchesNorth), 10);
   const json = JSON.stringify(data);
   assert.match(json, /"doubleHeight":false/);
   assert.match(json, /"columns":5/);
@@ -281,6 +309,9 @@ test("Wang 5x8 neighbourhoods stay on the fixed sprites", () => {
   const allowed = new Set<number>([
     WANG_5X8_INDEX.floor,
     WANG_5X8_INDEX.single,
+    WANG_5X8_INDEX.corridorNS,
+    WANG_5X8_INDEX.corridorNSTop,
+    WANG_5X8_INDEX.corridorNSBottom,
     ...WANG_5X8_BORDER,
     WANG_5X8_INDEX.innerNW,
     WANG_5X8_INDEX.innerNE,
@@ -303,9 +334,8 @@ test("Wang 5x8 neighbourhoods stay on the fixed sprites", () => {
     const resolved = wangResolve(actual, true);
     assert.equal(allowed.has(resolved.index), true);
     assert.equal(isWang5x8Black(resolved.index), false);
-    if (actual.Top === 1) {
-      assert.equal(resolved.index === 0 || resolved.index === 1 || resolved.index === 2, false);
-    }
+    assert.equal(resolved.index === 0 || resolved.index === 1 || resolved.index === 2, false);
+    assert.equal(resolved.index === 5 || resolved.index === 6 || resolved.index === 7, false);
     const cardinals = [actual.Top, actual.Right, actual.Bottom, actual.Left].filter((value) => value === 1).length;
     const missingDiagonal = [
       actual.TopLeft,
@@ -315,13 +345,22 @@ test("Wang 5x8 neighbourhoods stay on the fixed sprites", () => {
     ].filter((value) => value !== 1).length;
     if (cardinals === 4 && missingDiagonal === 0) assert.equal(resolved.index, 16);
     if (cardinals === 4 && missingDiagonal === 1) {
-      if (actual.TopLeft !== 1) assert.equal(resolved.index, 11);
-      if (actual.TopRight !== 1) assert.equal(resolved.index, 12);
-      if (actual.BottomLeft !== 1) assert.equal(resolved.index, 21);
-      if (actual.BottomRight !== 1) assert.equal(resolved.index, 22);
+      if (actual.TopLeft !== 1) assert.equal(resolved.index, 24);
+      if (actual.TopRight !== 1) assert.equal(resolved.index, 23);
+      if (actual.BottomLeft !== 1) assert.equal(resolved.index, 29);
+      if (actual.BottomRight !== 1) assert.equal(resolved.index, 28);
     }
     if (cardinals === 4 && missingDiagonal >= 2) assert.equal(resolved.index, 16);
-    if (cardinals === 0) assert.equal(resolved.index, 6);
+    if (cardinals === 0) assert.equal(resolved.index, 13);
+    if (actual.Left === 2 && actual.Right === 2 && actual.Top === 1 && actual.Bottom === 1) {
+      assert.equal(resolved.index, 8);
+    }
+    if (actual.Left === 2 && actual.Right === 2 && actual.Top === 2 && actual.Bottom === 1) {
+      assert.equal(resolved.index, 3);
+    }
+    if (actual.Left === 2 && actual.Right === 2 && actual.Top === 1 && actual.Bottom === 2) {
+      assert.equal(resolved.index, 13);
+    }
     const hit = firstMatchingRule(wang.rules, actual);
     if (hit === null) {
       assert.equal(resolved.index, wang.defaultSpriteIndex);
@@ -333,17 +372,17 @@ test("Wang 5x8 neighbourhoods stay on the fixed sprites", () => {
   }
 
   assert.equal(wangResolve(actualFromCornerMask(15), true).index, 16);
-  assert.equal(wangResolve(actualFromCornerMask(0), true).index, 6);
+  assert.equal(wangResolve(actualFromCornerMask(0), true).index, 13);
   assert.equal(firstMatchingRule(wang.rules, actualFromCornerMask(15)), 16);
   const southEdge = {
     Top: 1, Bottom: 2, Left: 1, Right: 1, TopLeft: 2, TopRight: 2, BottomLeft: 2, BottomRight: 2,
   } satisfies Neighbors;
-  assert.equal(wangMatchingIndex(southEdge, true), 26);
-  assert.equal(wangResolve(southEdge, true).index, 26);
+  assert.equal(wangMatchingIndex(southEdge, true), 21);
+  assert.equal(wangResolve(southEdge, true).index, 21);
   const northEdge = {
     Top: 2, Bottom: 1, Left: 1, Right: 1, TopLeft: 2, TopRight: 2, BottomLeft: 1, BottomRight: 1,
   } satisfies Neighbors;
-  assert.equal(wangResolve(northEdge, true).index, 1);
+  assert.equal(wangResolve(northEdge, true).index, 11);
   const corridor = {
     Top: 2, Bottom: 2, Left: 1, Right: 1, TopLeft: 2, TopRight: 2, BottomLeft: 2, BottomRight: 2,
   } satisfies Neighbors;
@@ -488,7 +527,7 @@ test("sheet size must match the preset grid", () => {
   assert.equal(extra.data?.cells.length, 45);
   assert.equal(extra.data?.cells[40]?.role, "unmapped");
   assert.equal(extra.data?.cells[40]?.label, "범위 밖");
-  assert.equal(extra.data?.rules.length, 14);
+  assert.equal(extra.data?.rules.length, 17);
   assert.equal(extra.data?.defaultSpriteIndex, 16);
 });
 
@@ -517,19 +556,22 @@ test("the unity builder slices, binds m_TilingRules, and adds both menus", () =>
   assert.match(script, /public bool doubleHeight;/);
   assert.match(script, /5x8/);
   assert.match(script, /case "floor": return 16;/);
-  assert.match(script, /case "north": return 1;/);
-  assert.match(script, /case "south": return 26;/);
+  assert.match(script, /case "north": return 11;/);
+  assert.match(script, /case "south": return 21;/);
   assert.match(script, /case "west": return 15;/);
-  assert.match(script, /case "east": return 18;/);
-  assert.match(script, /case "outer_nw": return 0;/);
-  assert.match(script, /case "outer_ne": return 2;/);
-  assert.match(script, /case "outer_sw": return 25;/);
-  assert.match(script, /case "outer_se": return 28;/);
-  assert.match(script, /case "inner_nw": return 11;/);
-  assert.match(script, /case "inner_ne": return 12;/);
-  assert.match(script, /case "inner_sw": return 21;/);
-  assert.match(script, /case "inner_se": return 22;/);
-  assert.match(script, /case "single": return 6;/);
+  assert.match(script, /case "east": return 17;/);
+  assert.match(script, /case "outer_nw": return 10;/);
+  assert.match(script, /case "outer_ne": return 12;/);
+  assert.match(script, /case "outer_sw": return 20;/);
+  assert.match(script, /case "outer_se": return 22;/);
+  assert.match(script, /case "inner_nw": return 24;/);
+  assert.match(script, /case "inner_ne": return 23;/);
+  assert.match(script, /case "inner_sw": return 29;/);
+  assert.match(script, /case "inner_se": return 28;/);
+  assert.match(script, /case "single": return 13;/);
+  assert.match(script, /case "corridor_ns": return 8;/);
+  assert.match(script, /case "corridor_ns_top": return 3;/);
+  assert.match(script, /case "corridor_ns_bottom": return 13;/);
   assert.match(script, /if \(IsWang5x8\(data\)\) return 16;/);
   assert.match(script, /index == 31 \|\| index == 32 \|\| index == 33 \|\| index == 34/);
   assert.match(script, /index == 36 \|\| index == 37 \|\| index == 38 \|\| index == 39/);
