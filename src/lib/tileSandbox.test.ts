@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { FIFTEEN_TILE_MASKS, pixelLabTileIndex } from "./ruleTile.ts";
+import { FIFTEEN_TILE_MASKS, pixelLabTileIndex, wangIndexForMask } from "./ruleTile.ts";
 import {
   CARDINAL,
   cardinalMaskAt,
   cellsTouchedByEdit,
   emptySandbox,
   paintCell,
+  sandboxSourceRect,
   sandboxTileIndex,
 } from "./tileSandbox.ts";
 
@@ -50,4 +51,30 @@ test("painting a cell refreshes that cell and its four neighbors", () => {
   const erased = paintCell(cells, 3, 2, 0);
   assert.equal(cardinalMaskAt(erased, 3, 3) & CARDINAL.Up, 0);
   assert.equal(sandboxTileIndex(erased, 3, 2), null);
+});
+
+test("a 5x8 Wang sheet crops the full logical tile instead of the mask number", () => {
+  let cells = emptySandbox();
+  cells = paintCell(cells, 1, 1, 1);
+  const layout = { kind: "wang" as const, doubled: true };
+  const alone = sandboxSourceRect(cells, 1, 1, 32, 8, layout);
+  assert.ok(alone);
+  assert.equal(alone.mask, 0);
+  assert.equal(alone.index, wangIndexForMask(0, true));
+  assert.equal(alone.width, 32);
+  assert.equal(alone.height, 64);
+  assert.equal(sandboxTileIndex(cells, 1, 1, 8, layout), wangIndexForMask(0, true));
+
+  cells = paintCell(cells, 1, 0, 1);
+  cells = paintCell(cells, 2, 1, 1);
+  cells = paintCell(cells, 1, 2, 1);
+  cells = paintCell(cells, 0, 1, 1);
+  const full = sandboxSourceRect(cells, 1, 1, 32, 8, layout);
+  assert.ok(full);
+  assert.equal(full.mask, 15);
+  assert.deepEqual(
+    { x: full.x, y: full.y, width: full.width, height: full.height },
+    { x: 32, y: 64, width: 32, height: 64 },
+  );
+  assert.notEqual(full.index, full.mask);
 });

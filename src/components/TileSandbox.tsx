@@ -8,9 +8,10 @@ import {
   cardinalMaskAt,
   emptySandbox,
   paintCell,
+  sandboxSourceRect,
   sandboxTileIndex,
+  type SandboxLayout,
 } from "@/lib/tileSandbox";
-import { pixelLabSourceRect } from "@/lib/ruleTile";
 
 type Tool = "brush" | "eraser";
 
@@ -18,6 +19,7 @@ type Props = {
   previewUrl: string | null;
   tileSize: number;
   canSample: boolean;
+  layout: SandboxLayout;
 };
 
 const MASK_COLORS = [
@@ -39,7 +41,7 @@ const MASK_COLORS = [
   "#ece7df",
 ];
 
-export function TileSandbox({ previewUrl, tileSize, canSample }: Props) {
+export function TileSandbox({ previewUrl, tileSize, canSample, layout }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [tool, setTool] = useState<Tool>("brush");
   const [cells, setCells] = useState<number[]>(() => emptySandbox());
@@ -79,11 +81,13 @@ export function TileSandbox({ previewUrl, tileSize, canSample }: Props) {
         const dy = y * SANDBOX_CELL_PX;
         context.fillStyle = (x + y) % 2 === 0 ? "#141820" : "#1b2230";
         context.fillRect(dx, dy, SANDBOX_CELL_PX, SANDBOX_CELL_PX);
-        const index = sandboxTileIndex(grid, x, y);
+        const index = sandboxTileIndex(grid, x, y, SANDBOX_SIZE, layout);
         if (index !== null) {
           const mask = cardinalMaskAt(grid, x, y);
-          if (image && image.complete && image.naturalWidth > 0) {
-            const source = pixelLabSourceRect(mask, tileSize);
+          const source = image && image.complete && image.naturalWidth > 0
+            ? sandboxSourceRect(grid, x, y, tileSize, SANDBOX_SIZE, layout)
+            : null;
+          if (source && image) {
             context.drawImage(
               image,
               source.x,
@@ -107,7 +111,7 @@ export function TileSandbox({ previewUrl, tileSize, canSample }: Props) {
         context.strokeRect(dx + 0.5, dy + 0.5, SANDBOX_CELL_PX - 1, SANDBOX_CELL_PX - 1);
       }
     }
-  }, [cells, sheet, tileSize]);
+  }, [cells, sheet, tileSize, layout]);
 
   function cellFromEvent(event: { clientX: number; clientY: number; currentTarget: HTMLCanvasElement }) {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -132,7 +136,9 @@ export function TileSandbox({ previewUrl, tileSize, canSample }: Props) {
   const hoverMask = hover && cells[hover.y * SANDBOX_SIZE + hover.x] === 1
     ? cardinalMaskAt(cells, hover.x, hover.y)
     : null;
-  const hoverIndex = hover && hoverMask !== null ? sandboxTileIndex(cells, hover.x, hover.y) : null;
+  const hoverIndex = hover && hoverMask !== null
+    ? sandboxTileIndex(cells, hover.x, hover.y, SANDBOX_SIZE, layout)
+    : null;
 
   return (
     <section className="rounded-2xl border border-[#2a3140] bg-[#13171f]/95 p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)]">
@@ -223,8 +229,12 @@ export function TileSandbox({ previewUrl, tileSize, canSample }: Props) {
         {hover
           ? `(${hover.x}, ${hover.y}) · ${hoverMask === null ? "비어 있음" : `마스크 ${hoverMask} · 타일 ${hoverIndex}`}`
           : canSample
-            ? "15-tileset 시트의 칸을 마스크와 1:1로 그립니다."
-            : "시트가 4×4 15-tileset으로 맞으면 타일 이미지를 그립니다. 그 전에는 마스크 색으로 보여 줍니다."}
+            ? layout.kind === "wang"
+              ? layout.doubled
+                ? "Wang 5×8 시트의 칸을 잘라 마스크와 1:1로 그립니다."
+                : "Wang 5×4 시트의 칸을 잘라 마스크와 1:1로 그립니다."
+              : "15-tileset 시트의 칸을 마스크와 1:1로 그립니다."
+            : "시트가 Wang 5열(5×4 또는 5×8)이나 4×4 15-tileset으로 맞으면 타일 이미지를 그립니다. 그 전에는 마스크 숫자로 보여 줍니다."}
       </p>
     </section>
   );
