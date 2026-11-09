@@ -55,9 +55,9 @@ function frame(width: number, height: number, paint: (pixels: Uint8ClampedArray)
   return { pixels, width, height };
 }
 
-test("motion bounds use the same alpha cutoff as ghost cleaning", () => {
-  assert.equal(MOTION_ALPHA_THRESHOLD, GHOST_ALPHA_MAX);
+test("motion feet ignore alpha 30 while ghost cleaning clears only alpha under 30", () => {
   assert.equal(MOTION_ALPHA_THRESHOLD, 30);
+  assert.equal(GHOST_ALPHA_MAX, 29);
   assert.equal(MOTION_MAX_EDGE, MAX_ATLAS_EDGE);
   const width = 8;
   const height = 10;

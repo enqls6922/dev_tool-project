@@ -81,6 +81,32 @@ export const FIFTEEN_TILE_MASKS = [
   0, 8, 6, 1,
 ] as const;
 
+/** Sheet index whose PixelLab 15-tileset cell stores this mask. Masks 0–15 are a bijection. */
+export function pixelLabTileIndex(mask: number): number {
+  if (!Number.isInteger(mask) || mask < 0 || mask > 15) {
+    throw new Error("타일 마스크는 0부터 15까지입니다.");
+  }
+  const index = (FIFTEEN_TILE_MASKS as readonly number[]).indexOf(mask);
+  if (index < 0) throw new Error("PixelLab 15-tileset에 없는 마스크입니다.");
+  return index;
+}
+
+export function pixelLabSourceRect(mask: number, tileSize: number) {
+  if (!Number.isInteger(tileSize) || tileSize <= 0) {
+    throw new Error("타일 크기는 양의 정수여야 합니다.");
+  }
+  const index = pixelLabTileIndex(mask);
+  const column = index % 4;
+  const row = Math.floor(index / 4);
+  return {
+    index,
+    x: column * tileSize,
+    y: row * tileSize,
+    width: tileSize,
+    height: tileSize,
+  };
+}
+
 const CORNER_BITS = [
   { bit: 1, dirs: ["TopLeft", "Top", "Left"] },
   { bit: 2, dirs: ["Top", "TopRight", "Right"] },

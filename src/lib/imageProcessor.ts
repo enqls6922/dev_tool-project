@@ -1,4 +1,6 @@
 import potpack, { type PotpackBox } from "potpack";
+import { sanitizeStem } from "./fileNames.ts";
+import { safeDisplayName } from "./uploadPolicy.ts";
 import type { AtlasDocument, PackResult, PackSettings, SpriteRect } from "./types";
 
 export const MAX_IMAGE_EDGE = 8192;
@@ -12,9 +14,12 @@ export const POT_EDGES = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192] as 
 
 const OPAQUE_ALPHA = 0;
 
-/** Inclusive alpha band treated as AI ghost / dot noise. 0 stays empty; 31 and above stay. */
+/**
+ * AI ghost band. Alpha must be greater than 0 and less than 30.
+ * 0 stays empty. 30 and above stay.
+ */
 export const GHOST_ALPHA_MIN = 1;
-export const GHOST_ALPHA_MAX = 30;
+export const GHOST_ALPHA_MAX = 29;
 
 export type OpaqueBounds = {
   x: number;
@@ -48,14 +53,8 @@ export function isPngFile(file: File): boolean {
 }
 
 export function toSpriteName(fileName: string): string {
-  const base = fileName.replace(/\.[^.]+$/, "").normalize("NFKC");
-  const cleaned = base
-    .replace(/[\\/:*?"<>|#]/g, "_")
-    .replace(/\s+/g, "_")
-    .replace(/_+/g, "_")
-    .replace(/^_+|_+$/g, "");
-  const clipped = cleaned.slice(0, 80);
-  return clipped.length > 0 ? clipped : "sprite";
+  const stem = sanitizeStem(fileName);
+  return stem.length > 0 ? stem : "sprite";
 }
 
 export function uniqueSpriteNames(names: readonly string[]): string[] {
@@ -105,19 +104,58 @@ export function findOpaqueBounds(
 }
 
 /**
- * Clear ambiguous semi-transparent noise in place.
- * Alpha from 1 through 30 becomes 0. RGB is left unchanged, and alpha 0 / 31–255 stay.
+ * Clear AI ghost texels in place.
+ * When alpha is greater than 0 and less than 30, RGBA becomes (0, 0, 0, 0).
+ * Alpha 0 and alpha 30–255 stay, including their RGB.
  * Returns how many texels were cleared.
  */
 export function cleanGhostPixels(pixels: Uint8ClampedArray): number {
   let cleared = 0;
-  for (let index = 3; index < pixels.length; index += 4) {
-    const alpha = pixels[index] ?? 0;
-    if (alpha < GHOST_ALPHA_MIN || alpha > GHOST_ALPHA_MAX) continue;
+  for (let index = 0; index + 3 < pixels.length; index += 4) {
+    const alpha = pixels[index + 3] ?? 0;
+    if (alpha <= 0 || alpha >= 30) continue;
     pixels[index] = 0;
+    pixels[index + 1] = 0;
+    pixels[index + 2] = 0;
+    pixels[index + 3] = 0;
     cleared += 1;
   }
   return cleared;
+}
+
+/**
+ * Clamp-expand a sprite by one pixel on every side.
+ * Edge texels are copied up, down, left, and right. The four corners copy the
+ * corner texel. The interior is unchanged. This is the 1px bleed that hides
+ * tilemap filtering gaps.
+ */
+export function extrudeClampBleed(
+  pixels: Uint8ClampedArray,
+  width: number,
+  height: number,
+): Uint8ClampedArray {
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {
+    throw new Error("블리드 원본 크기는 양의 정수여야 합니다.");
+  }
+  if (pixels.length < width * height * 4) {
+    throw new Error("블리드 원본 픽셀이 크기보다 짧습니다.");
+  }
+  const outWidth = width + 2;
+  const outHeight = height + 2;
+  const out = new Uint8ClampedArray(outWidth * outHeight * 4);
+  for (let y = 0; y < outHeight; y += 1) {
+    const srcY = Math.min(height - 1, Math.max(0, y - 1));
+    for (let x = 0; x < outWidth; x += 1) {
+      const srcX = Math.min(width - 1, Math.max(0, x - 1));
+      const src = (srcY * width + srcX) * 4;
+      const dst = (y * outWidth + x) * 4;
+      out[dst] = pixels[src] ?? 0;
+      out[dst + 1] = pixels[src + 1] ?? 0;
+      out[dst + 2] = pixels[src + 2] ?? 0;
+      out[dst + 3] = pixels[src + 3] ?? 0;
+    }
+  }
+  return out;
 }
 
 function requireContext(
@@ -162,7 +200,7 @@ export function loadImage(file: File): Promise<HTMLImageElement> {
     };
     image.onerror = () => {
       URL.revokeObjectURL(url);
-      reject(new Error(`${file.name} 을(를) PNG로 디코딩하지 못했습니다.`));
+      reject(new Error(`${safeDisplayName(file.name)} 을(를) 이미지로 디코딩하지 못했습니다.`));
     };
     image.src = url;
   });
@@ -376,21 +414,44 @@ export function layoutSprites<T extends { name: string }>(
   );
 }
 
+function bleedCanvas(source: HTMLCanvasElement): HTMLCanvasElement {
+  const context = requireContext(source, true);
+  const image = context.getImageData(0, 0, source.width, source.height);
+  const width = source.width + 2;
+  const height = source.height + 2;
+  const pixels = extrudeClampBleed(image.data, source.width, source.height);
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const out = requireContext(canvas);
+  const imageData = out.createImageData(width, height);
+  imageData.data.set(pixels);
+  out.putImageData(imageData, 0, 0);
+  return canvas;
+}
+
 /** Pack trimmed canvases into one atlas. Padding sits between sprites, not after the last edge. */
 export function packSprites(
   processedCanvases: { name: string; canvas: HTMLCanvasElement }[],
   padding: number,
-  options?: { forcePowerOfTwo?: boolean },
+  options?: { forcePowerOfTwo?: boolean; bleed?: boolean },
 ): PackResult {
   if (processedCanvases.length === 0) {
     throw new Error("패킹할 스프라이트가 없습니다.");
   }
 
-  const frames = processedCanvases.map((sprite) => ({
-    ...sprite,
-    width: sprite.canvas.width,
-    height: sprite.canvas.height,
-  }));
+  const bleed = options?.bleed ? 1 : 0;
+  const frames = processedCanvases.map((sprite) => {
+    const canvas = bleed ? bleedCanvas(sprite.canvas) : sprite.canvas;
+    return {
+      name: sprite.name,
+      canvas,
+      width: canvas.width,
+      height: canvas.height,
+      contentWidth: sprite.canvas.width,
+      contentHeight: sprite.canvas.height,
+    };
+  });
   const layout = layoutFrames(frames, padding, options?.forcePowerOfTwo ?? false);
   if (layout.width > MAX_ATLAS_EDGE || layout.height > MAX_ATLAS_EDGE) {
     throw new Error(
@@ -407,18 +468,22 @@ export function packSprites(
     context.drawImage(sprite.canvas, sprite.x, sprite.y);
   }
 
+  const sprites = layout.sprites.map((sprite) => ({
+    name: sprite.name,
+    x: sprite.x + bleed,
+    y: sprite.y + bleed,
+    width: sprite.contentWidth,
+    height: sprite.contentHeight,
+  }));
+  const contentArea = sprites.reduce((sum, sprite) => sum + sprite.width * sprite.height, 0);
+  const fill = layout.width > 0 && layout.height > 0 ? contentArea / (layout.width * layout.height) : 0;
+
   return {
     canvas,
     width: layout.width,
     height: layout.height,
-    fill: layout.fill,
-    sprites: layout.sprites.map(({ name, x, y, width, height }) => ({
-      name,
-      x,
-      y,
-      width,
-      height,
-    })),
+    fill,
+    sprites,
   };
 }
 
@@ -434,6 +499,7 @@ export function buildAtlasDocument(pack: PackResult, settings: PackSettings): At
     trimAlpha: settings.trimAlpha,
     pixelated: settings.pixelated,
     forcePowerOfTwo: settings.forcePowerOfTwo,
+    bleed: settings.bleed ? 1 : 0,
     sprites: pack.sprites.map(({ name, x, y, width, height }) => ({
       name,
       x,
