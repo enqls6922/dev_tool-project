@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   SANDBOX_CELL_PX,
   SANDBOX_SIZE,
+  blobMaskAt,
   cardinalMaskAt,
   emptySandbox,
   paintCell,
@@ -134,7 +135,9 @@ export function TileSandbox({ previewUrl, tileSize, canSample, layout }: Props) 
   }
 
   const hoverMask = hover && cells[hover.y * SANDBOX_SIZE + hover.x] === 1
-    ? cardinalMaskAt(cells, hover.x, hover.y)
+    ? layout.kind === "godot"
+      ? blobMaskAt(cells, hover.x, hover.y)
+      : cardinalMaskAt(cells, hover.x, hover.y)
     : null;
   const hoverIndex = hover && hoverMask !== null
     ? sandboxTileIndex(cells, hover.x, hover.y, SANDBOX_SIZE, layout)
@@ -146,7 +149,7 @@ export function TileSandbox({ previewUrl, tileSize, canSample, layout }: Props) 
         <div>
           <h2 className="text-sm font-semibold text-[#ece7df]">실시간 붓칠 샌드박스</h2>
           <p className="mt-1 text-xs leading-5 text-[#9aa3b5]">
-            8×8 칸, 각 32px. 좌클릭은 채우고 우클릭은 지웁니다. 마스크 Up=1, Right=2, Down=4, Left=8.
+            8×8 칸, 각 32px. 좌클릭은 채우고 우클릭은 지웁니다. 15-tileset과 Wang은 Up=1, Right=2, Down=4, Left=8. Godot은 8방향 blob입니다.
           </p>
         </div>
         <div className="flex flex-wrap gap-1.5" role="toolbar" aria-label="샌드박스 도구">
@@ -233,8 +236,12 @@ export function TileSandbox({ previewUrl, tileSize, canSample, layout }: Props) 
               ? layout.doubled
                 ? "Wang 5×8 시트의 칸을 잘라 마스크와 1:1로 그립니다."
                 : "Wang 5×4 시트의 칸을 잘라 마스크와 1:1로 그립니다."
-              : "15-tileset 시트의 칸을 마스크와 1:1로 그립니다."
-            : "시트가 Wang 5열(5×4 또는 5×8)이나 4×4 15-tileset으로 맞으면 타일 이미지를 그립니다. 그 전에는 마스크 숫자로 보여 줍니다."}
+              : layout.kind === "godot"
+                ? "Godot 47-Blob 템플릿의 칸을 8방향 이웃에 맞춰 그립니다."
+                : layout.shape === "4x4"
+                  ? "15-tileset 4×4 시트의 칸을 마스크와 1:1로 그립니다."
+                  : "15-tileset 3×5 시트의 칸을 마스크와 1:1로 그립니다."
+            : "시트가 선택한 프리셋과 맞으면 타일 이미지를 그립니다. 그 전에는 마스크 숫자로 보여 줍니다."}
       </p>
     </section>
   );

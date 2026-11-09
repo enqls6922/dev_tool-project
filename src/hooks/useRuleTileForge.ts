@@ -11,15 +11,17 @@ import {
 } from "@/lib/imageProcessor";
 import { acceptRasterUploads } from "@/lib/uploadSecurity";
 import {
+  PRESET_INFO,
   analyzeSheet,
+  suggestPreset,
   type RulePreset,
   type RuleTileSize,
   type SheetAnalysis,
 } from "@/lib/ruleTile";
 
 export function useRuleTileForge() {
-  const [preset, setPreset] = useState<RulePreset>("15-tileset");
-  const [tileSize, setTileSize] = useState<RuleTileSize>(32);
+  const [preset, setPresetState] = useState<RulePreset>("15-tileset");
+  const [tileSize, setTileSizeState] = useState<RuleTileSize>(32);
   const [cleanGhostPixels, setCleanGhostPixelsState] = useState(true);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -36,6 +38,8 @@ export function useRuleTileForge() {
   const mountedRef = useRef(true);
   const fileRef = useRef<File | null>(null);
   const cleanRef = useRef(true);
+  const presetRef = useRef<RulePreset>("15-tileset");
+  const tileSizeRef = useRef<RuleTileSize>(32);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -95,6 +99,7 @@ export function useRuleTileForge() {
       setImageSize({ width, height });
       setGhostsRemoved(removed);
       setError(null);
+      adoptPreset(width, height, tileSizeRef.current);
     } catch (caught) {
       if (!mountedRef.current || run !== runRef.current) return;
       releasePreview();
@@ -127,6 +132,25 @@ export function useRuleTileForge() {
     fileRef.current = next;
     setFile(next);
     void renderSheet(next, cleanRef.current);
+  }
+
+  function adoptPreset(width: number, height: number, size: number) {
+    const next = suggestPreset(width, height, size, presetRef.current);
+    if (next === presetRef.current) return;
+    presetRef.current = next;
+    setPresetState(next);
+    setNotice(`${PRESET_INFO[next].label} 프리셋을 시트 비율에 맞춰 골랐습니다.`);
+  }
+
+  function setPreset(next: RulePreset) {
+    presetRef.current = next;
+    setPresetState(next);
+  }
+
+  function setTileSize(next: RuleTileSize) {
+    tileSizeRef.current = next;
+    setTileSizeState(next);
+    if (imageSize) adoptPreset(imageSize.width, imageSize.height, next);
   }
 
   function setCleanGhostPixels(next: boolean) {
