@@ -4,7 +4,7 @@ export const RULE_TILE_SIZES = [16, 32, 48, 64] as const;
 
 export type RuleTileSize = (typeof RULE_TILE_SIZES)[number];
 
-export const RULE_PRESETS = ["15-tileset", "godot-47", "wang"] as const;
+export const RULE_PRESETS = ["godot-47", "wang", "15-tileset"] as const;
 
 export type RulePreset = (typeof RULE_PRESETS)[number];
 
@@ -57,17 +57,17 @@ export const PRESET_INFO: Record<RulePreset, PresetInfo> = {
   },
   "godot-47": {
     id: "godot-47",
-    label: "PixelLab Godot (47-Blob 풀 타일)",
+    label: "PixelLab Godot (47-Blob)",
     columns: 12,
     rows: 4,
-    hint: "Godot 3×3 minimal 표준 템플릿은 12×4(47타일, 빈 칸 1개)입니다. PixelLab Godot 다운로드가 기본 칸 24×8이면 2×2를 한 타일로 묶어 같은 템플릿으로 읽습니다. 대각 모서리까지 8방향을 검사합니다.",
+    hint: "Godot 표준 3×3 Minimal(47-Blob)은 12×4 고정 배열입니다. 칸의 픽셀은 column×타일크기, row×타일크기이고 Unity 47-RuleTile 8방향 룰과 1:1입니다. 24×8 시트는 2×2를 한 타일로 읽습니다.",
   },
   wang: {
     id: "wang",
     label: "PixelLab Wang (5×8, 40타일)",
     columns: 5,
     rows: 8,
-    hint: "PixelLab Wang 5×8(40칸)은 15-tileset과 다른 2-corner 시트입니다. 인덱스 = NW + 2·NE + 4·SW + 8·SE. 0은 고립, 15는 내부 바닥, 5·10은 세로 벽, 7·11·13·14는 안쪽 모서리입니다. 아래 4줄은 N=1, E=2, S=4, W=8 엣지 밴드입니다.",
+    hint: "5×4는 인덱스 = NW + 2·NE + 4·SW + 8·SE 이고 tile_15가 내부 바닥입니다. 5×8(160×256)은 같은 마스크가 세로 2칸입니다. 짝수 행이 표면, 홀수 행이 벽입니다. 내부 바닥은 tile_30(좌측 하단 평평한 표면)이고 tile_15는 서쪽 기둥 벽, tile_00은 기둥 상단입니다. 기본 스프라이트도 tile_30입니다.",
   },
 };
 
@@ -144,29 +144,24 @@ export function pixelLabSourceRect(mask: number, tileSize: number, shape: Fiftee
 }
 
 /**
- * PixelLab Wang sheet, 5 columns.
- * A 5×4 sheet holds the 16 Wang 2-corner tiles in index order.
- * A 5×8 sheet (160×256 at 32px, 40 cells) adds a 2-edge band on rows 4–7.
- * Neither band is a 15-tileset permutation, and cells are not paired into
- * double-height sprites.
+ * PixelLab Wang sheet, 5 columns. Bits: NW=1, NE=2, SW=4, SE=8.
  *
- * 2-corner index (rows 0–3), the standard formula:
- *   index = NW·1 + NE·2 + SW·4 + SE·8
- *   column = index % 5, row = floor(index / 5)
- *   0 single, 15 full floor, 5 and 10 vertical walls, 3 and 12 horizontal edges,
- *   1, 2, 4, 8 outer corners, 7, 11, 13, 14 inner corners.
- * Indices 16–19 are the unused tail of the 5-wide row.
+ * A 5×4 sheet stores the 16 masks in index order. Tile 15 is the full floor
+ * and tile 0 is the isolated default. Indices 16–19 are padding.
  *
- * 2-edge index (rows 4–7):
- *   index = 20 + N·1 + E·2 + S·4 + W·8
- *   Used when a painted cell has cardinal neighbours but no filled corner
- *   (a one-tile corridor). Indices 36–39 are padding.
+ * A 5×8 sheet (160×256 at 32px) stacks each mask as two square cells.
+ * The even row is the surface and the odd row is the wall under it.
+ * Surface index = floor(mask / 5) * 10 + (mask % 5).
+ * Mask 15, the full center, is tile_30: column 0, row 6, the flat floor.
+ * tile_15 is the lower half of mask 5 (the west wall), a pillar wall.
+ * tile_25 is the lower half of mask 10 (the east wall), not the floor.
+ * tile_00 is the pillar cap. The default sprite is tile_30.
  */
 export const WANG_COLUMNS = 5;
 export const WANG_LOGICAL_ROWS = 4;
 export const WANG_FULL_ROWS = 8;
-/** First index of the 2-edge band on a 5×8 sheet. */
-export const WANG_EDGE_ORIGIN = 20;
+/** Surface cell of the full-center mask on a 5×8 sheet. */
+export const WANG_TALL_FLOOR_INDEX = 30;
 
 export function wangEdgeBand(rows: number): boolean {
   return rows >= WANG_FULL_ROWS;
@@ -176,41 +171,52 @@ export function wangMappedRows(rows: number): number {
   return wangEdgeBand(rows) ? WANG_FULL_ROWS : WANG_LOGICAL_ROWS;
 }
 
+function assertWangMask(mask: number): void {
+  if (!Number.isInteger(mask) || mask < 0 || mask > 15) {
+    throw new Error("타일 마스크는 0부터 15까지입니다.");
+  }
+}
+
+/** Surface cell for this corner mask. On a 5×8 sheet that cell is the even row. */
+export function wangSurfaceIndex(mask: number, tall: boolean): number {
+  assertWangMask(mask);
+  if (!tall) return mask;
+  const column = mask % WANG_COLUMNS;
+  const logicalRow = Math.floor(mask / WANG_COLUMNS);
+  return logicalRow * 2 * WANG_COLUMNS + column;
+}
+
+/** Sheet index whose surface stores this mask. */
+export function wangIndexForMask(mask: number, tall = false): number {
+  return wangSurfaceIndex(mask, tall);
+}
+
 /**
- * Corner or edge mask at a row-major index.
- * -1 is padding (the fifth column of every fourth row).
- * Both bands store masks 0–15; the band is which group of four rows the index is in.
+ * Corner mask at a row-major index. -1 is padding.
+ * On a tall sheet the wall row repeats the surface mask above it.
  */
-export function wangCellMask(index: number): number {
+export function wangCellMask(index: number, tall = false): number {
   if (!Number.isInteger(index) || index < 0) return -1;
   const column = index % WANG_COLUMNS;
   const row = Math.floor(index / WANG_COLUMNS);
-  if (row >= WANG_FULL_ROWS) return -1;
-  const local = (row % WANG_LOGICAL_ROWS) * WANG_COLUMNS + column;
+  const limit = tall ? WANG_FULL_ROWS : WANG_LOGICAL_ROWS;
+  if (row >= limit) return -1;
+  const logicalRow = tall ? Math.floor(row / 2) : row;
+  const local = logicalRow * WANG_COLUMNS + column;
   return local <= 15 ? local : -1;
 }
 
-/** Sheet index of a 2-corner mask. The index is the mask. */
-export function wangIndexForMask(mask: number): number {
-  if (!Number.isInteger(mask) || mask < 0 || mask > 15) {
-    throw new Error("타일 마스크는 0부터 15까지입니다.");
-  }
-  return mask;
+/** Lower half of a tall Wang tile. Those cells are walls, not extra rules. */
+export function wangIsWallHalf(index: number, tall: boolean): boolean {
+  if (!tall || wangCellMask(index, true) < 0) return false;
+  return Math.floor(index / WANG_COLUMNS) % 2 === 1;
 }
 
-/** Sheet index of a 2-edge mask on the lower band of a 5×8 sheet. */
-export function wangEdgeIndex(mask: number): number {
-  if (!Number.isInteger(mask) || mask < 0 || mask > 15) {
-    throw new Error("타일 마스크는 0부터 15까지입니다.");
-  }
-  return WANG_EDGE_ORIGIN + mask;
-}
-
-export function wangSourceRect(mask: number, tileSize: number) {
+export function wangSourceRect(mask: number, tileSize: number, tall = false) {
   if (!Number.isInteger(tileSize) || tileSize <= 0) {
     throw new Error("타일 크기는 양의 정수여야 합니다.");
   }
-  const index = wangIndexForMask(mask);
+  const index = wangSurfaceIndex(mask, tall);
   const column = index % WANG_COLUMNS;
   const row = Math.floor(index / WANG_COLUMNS);
   return {
@@ -258,59 +264,27 @@ export const BLOB = {
 } as const;
 
 /**
- * Corner-state key → cell in Godot's 12×4 3×3-minimal template.
- * States are TL,TR,BL,BR. 0 outer, 1 side A, 2 side B, 3 concave, 4 filled.
- * (10, 1) is the unused cell and is absent.
+ * Godot 3×3 minimal template (`autotile_template_3x3_minimal`), 12×4.
+ * Values are canonical blob masks: N=1, NE=2, E=4, SE=8, S=16, SW=32, W=64, NW=128.
+ * -1 is the unused cell at column 10, row 1 (index 22).
+ * A cell's pixels start at (column * tileSize, row * tileSize).
  */
-const GODOT_TEMPLATE: Readonly<Record<string, { column: number; row: number }>> = {
-  "0,0,0,0": { column: 0, row: 3 },
-  "0,0,1,1": { column: 0, row: 0 },
-  "0,2,0,2": { column: 1, row: 3 },
-  "0,2,1,3": { column: 1, row: 0 },
-  "0,2,1,4": { column: 8, row: 0 },
-  "1,1,0,0": { column: 0, row: 2 },
-  "1,1,1,1": { column: 0, row: 1 },
-  "1,3,0,2": { column: 1, row: 2 },
-  "1,3,1,3": { column: 1, row: 1 },
-  "1,3,1,4": { column: 4, row: 1 },
-  "1,4,0,2": { column: 8, row: 3 },
-  "1,4,1,3": { column: 4, row: 2 },
-  "1,4,1,4": { column: 8, row: 1 },
-  "2,0,2,0": { column: 3, row: 3 },
-  "2,0,3,1": { column: 3, row: 0 },
-  "2,0,4,1": { column: 11, row: 0 },
-  "2,2,2,2": { column: 2, row: 3 },
-  "2,2,3,3": { column: 2, row: 0 },
-  "2,2,3,4": { column: 5, row: 0 },
-  "2,2,4,3": { column: 6, row: 0 },
-  "2,2,4,4": { column: 10, row: 0 },
-  "3,1,2,0": { column: 3, row: 2 },
-  "3,1,3,1": { column: 3, row: 1 },
-  "3,1,4,1": { column: 7, row: 1 },
-  "3,3,2,2": { column: 2, row: 2 },
-  "3,3,3,3": { column: 2, row: 1 },
-  "3,3,3,4": { column: 7, row: 3 },
-  "3,3,4,3": { column: 4, row: 3 },
-  "3,3,4,4": { column: 9, row: 0 },
-  "3,4,2,2": { column: 5, row: 3 },
-  "3,4,3,3": { column: 7, row: 0 },
-  "3,4,3,4": { column: 8, row: 2 },
-  "3,4,4,3": { column: 9, row: 1 },
-  "3,4,4,4": { column: 5, row: 1 },
-  "4,1,2,0": { column: 11, row: 3 },
-  "4,1,3,1": { column: 7, row: 2 },
-  "4,1,4,1": { column: 11, row: 2 },
-  "4,3,2,2": { column: 6, row: 3 },
-  "4,3,3,3": { column: 4, row: 0 },
-  "4,3,3,4": { column: 10, row: 2 },
-  "4,3,4,3": { column: 11, row: 1 },
-  "4,3,4,4": { column: 6, row: 1 },
-  "4,4,2,2": { column: 9, row: 3 },
-  "4,4,3,3": { column: 10, row: 3 },
-  "4,4,3,4": { column: 5, row: 2 },
-  "4,4,4,3": { column: 6, row: 2 },
-  "4,4,4,4": { column: 9, row: 2 },
-};
+export const GODOT_BLOB_GRID: readonly (readonly number[])[] = [
+  [16, 20, 84, 80, 213, 92, 116, 87, 28, 125, 124, 112],
+  [17, 21, 85, 81, 29, 127, 253, 113, 31, 119, -1, 245],
+  [1, 5, 69, 65, 23, 223, 247, 209, 95, 255, 221, 241],
+  [0, 4, 68, 64, 117, 71, 197, 93, 7, 199, 215, 193],
+];
+
+const GODOT_CELL_BY_MASK = new Map<number, { column: number; row: number }>();
+for (let row = 0; row < GODOT_BLOB_GRID.length; row += 1) {
+  const line = GODOT_BLOB_GRID[row];
+  for (let column = 0; column < line.length; column += 1) {
+    const mask = line[column];
+    if (mask < 0) continue;
+    GODOT_CELL_BY_MASK.set(mask, { column, row });
+  }
+}
 
 export function canonicalBlobMask(mask: number): number {
   const side = BLOB.N | BLOB.E | BLOB.S | BLOB.W;
@@ -322,26 +296,9 @@ export function canonicalBlobMask(mask: number): number {
   return canonical;
 }
 
-function cornerState(mask: number, sideA: number, sideB: number, corner: number): number {
-  const a = (mask & sideA) !== 0;
-  const b = (mask & sideB) !== 0;
-  if (!a && !b) return 0;
-  if (a && !b) return 1;
-  if (!a && b) return 2;
-  return (mask & corner) !== 0 ? 4 : 3;
-}
-
-function godotStateKey(mask: number): string {
-  const tl = cornerState(mask, BLOB.N, BLOB.W, BLOB.NW);
-  const tr = cornerState(mask, BLOB.N, BLOB.E, BLOB.NE);
-  const bl = cornerState(mask, BLOB.S, BLOB.W, BLOB.SW);
-  const br = cornerState(mask, BLOB.S, BLOB.E, BLOB.SE);
-  return `${tl},${tr},${bl},${br}`;
-}
-
 export function godotCellForMask(mask: number): { index: number; column: number; row: number } {
   const canonical = canonicalBlobMask(mask);
-  const cell = GODOT_TEMPLATE[godotStateKey(canonical)];
+  const cell = GODOT_CELL_BY_MASK.get(canonical);
   if (!cell) throw new Error("Godot 47-Blob 템플릿에 없는 이웃입니다.");
   return {
     index: cell.row * GODOT_COLUMNS + cell.column,
@@ -638,46 +595,6 @@ export function wangCornerLabel(mask: number): string {
   return "패턴";
 }
 
-function wangEdgeLabel(mask: number): string {
-  if (mask === 0) return "고립 단독";
-  if (mask === 15) return "내부 바닥";
-  const north = (mask & 1) !== 0;
-  const east = (mask & 2) !== 0;
-  const south = (mask & 4) !== 0;
-  const west = (mask & 8) !== 0;
-  const sides = [north, east, south, west].filter(Boolean).length;
-  if (sides === 3 && !west) return "서쪽 세로 벽";
-  if (sides === 3 && !east) return "동쪽 세로 벽";
-  if (sides === 3 && !north) return "북쪽 엣지";
-  if (sides === 3 && !south) return "남쪽 엣지";
-  if (sides === 2 && north && south) return "세로 통로";
-  if (sides === 2 && east && west) return "가로 통로";
-  if (sides === 2) return "바깥 코너";
-  if (sides === 1) return "끝";
-  return "엣지";
-}
-
-function wangEdgeName(mask: number): string {
-  if (mask === 0) return "edge_single";
-  if (mask === 15) return "edge_floor";
-  return `edge_${mask.toString(16)}`;
-}
-
-/** Cardinal This/NotThis. Diagonals stay Ignore so a corner rule can outrank this band. */
-function edgeNeighbors(mask: number): Neighbors {
-  const side = (bit: number): NeighborValue => ((mask & bit) !== 0 ? 1 : 2);
-  return {
-    Top: side(1),
-    Right: side(2),
-    Bottom: side(4),
-    Left: side(8),
-    TopLeft: 0,
-    TopRight: 0,
-    BottomLeft: 0,
-    BottomRight: 0,
-  };
-}
-
 function bitCount(mask: number): number {
   let count = 0;
   let value = mask;
@@ -754,28 +671,31 @@ function slotsForPreset(preset: RulePreset, shape: FifteenShape): Slot[] {
   return fifteenSlots(shape);
 }
 
-function wangSlots(edgeBand: boolean): Slot[] {
+function wangSlots(tall: boolean): Slot[] {
   const slots: Slot[] = [];
   for (let mask = 0; mask <= 15; mask += 1) {
+    const index = wangSurfaceIndex(mask, tall);
+    const floor = mask === 15;
     slots.push({
-      index: mask,
+      index,
       mask,
       name: cornerName(mask),
-      label: wangCornerLabel(mask),
+      label: tall && mask === 0 ? "기둥 상단" : wangCornerLabel(mask),
       neighbors: mask === 0 ? emptyNeighbors() : actualFromCornerMask(mask),
       rule: mask !== 0,
-      fallback: mask === 0,
+      fallback: tall ? floor : mask === 0,
     });
   }
-  if (!edgeBand) return slots;
+  if (!tall) return slots;
   for (let mask = 0; mask <= 15; mask += 1) {
+    const index = wangSurfaceIndex(mask, true) + WANG_COLUMNS;
     slots.push({
-      index: wangEdgeIndex(mask),
+      index,
       mask,
-      name: wangEdgeName(mask),
-      label: wangEdgeLabel(mask),
-      neighbors: edgeNeighbors(mask),
-      rule: mask !== 0,
+      name: cornerName(mask),
+      label: mask === 5 ? "기둥 벽" : `${wangCornerLabel(mask)} 아래`,
+      neighbors: emptyNeighbors(),
+      rule: false,
       fallback: false,
     });
   }
@@ -800,9 +720,19 @@ function orderedRules(slots: Slot[]): RuleEntry[] {
     }));
 }
 
-/** Unity's first match for this neighbourhood, or null when the single tile (index 0) applies. */
-export function wangMatchingIndex(actual: Neighbors, edgeBand: boolean): number | null {
-  return firstMatchingRule(orderedRules(wangSlots(edgeBand)), actual);
+/** Unity's first matching rule index, or null when the default sprite applies. */
+export function wangMatchingIndex(actual: Neighbors, tall: boolean): number | null {
+  return firstMatchingRule(orderedRules(wangSlots(tall)), actual);
+}
+
+/** Rule sprite for this neighbourhood. A 5×8 miss uses the flat floor, not the pillar cap. */
+export function wangResolve(actual: Neighbors, tall: boolean): { index: number; mask: number } {
+  const rules = orderedRules(wangSlots(tall));
+  for (const rule of rules) {
+    if (ruleMatches(rule.neighbors, actual)) return { index: rule.index, mask: rule.mask };
+  }
+  if (tall) return { index: WANG_TALL_FLOOR_INDEX, mask: 15 };
+  return { index: 0, mask: 0 };
 }
 
 function cloneNeighbors(neighbors: Neighbors): Neighbors {
@@ -900,8 +830,8 @@ export function analyzeSheet(input: {
 
   const cells = sliceSheet(input.width, input.height, sliceSize);
   const base = { columns, rows, cells, data: null, warning: null };
-  const edgeBand = input.preset === "wang" && wangEdgeBand(mappedRows);
-  const slots = input.preset === "wang" ? wangSlots(edgeBand) : slotsForPreset(input.preset, shape);
+  const tallWang = input.preset === "wang" && wangEdgeBand(mappedRows);
+  const slots = input.preset === "wang" ? wangSlots(tallWang) : slotsForPreset(input.preset, shape);
   const slotByIndex = new Map(slots.map((slot) => [slot.index, slot]));
   const fallback = slots.find((slot) => slot.fallback);
   if (!fallback) {
@@ -977,13 +907,15 @@ export function buildRuleTileScript(): string {
 // the rest Ignore, with stricter rules first.
 // PixelLab 15-tileset is 3 columns by 5 rows (indices 0-14). A native 4x4 or 4x8
 // sheet is accepted too and keeps the 16-role order.
-// Wang sheets are 5 columns of square cells. The 2-corner index is the mask:
-// index = NW + 2*NE + 4*SW + 8*SE, so tile 15 is the full floor and tile 11 is an
-// inner corner, not the floor. A 5x8 sheet adds a 2-edge band at indices 20-35
-// (N=1, E=2, S=4, W=8). RuleData.json lists those neighbours; this builder does not
-// remap them. doubleHeight is unused for that grid and stays false.
-// Godot 47-blob is the 12x4 3x3-minimal template (47 rules). A PixelLab Godot
-// download that is 24x8 base cells is sliced as that template at twice the tile size.
+// Wang sheets are 5 columns of square cells. On a 5x4 sheet the index is the mask
+// (NW + 2*NE + 4*SW + 8*SE), so tile 15 is the floor. On a 5x8 sheet each mask is
+// two cells tall: the even row is the surface and the odd row is the wall.
+// The full center is tile_30. tile_15 is the west pillar wall and tile_00 is the
+// pillar cap, so m_DefaultSprite is tile_30. doubleHeight stays false; each rule
+// samples one 32px surface cell.
+// Godot 47-blob is the fixed 12x4 3x3-minimal template (47 rules). A cell's pixels
+// are column * tileSize, row * tileSize. A PixelLab Godot download that is 24x8
+// base cells is sliced as that template at twice the tile size.
 // Each rule sets the four sides to This or NotThis. A diagonal is This or NotThis
 // only when both adjacent sides are This; otherwise the corner is Ignore.
 #if UNITY_EDITOR

@@ -2,15 +2,15 @@ import {
   godotSourceRect,
   pixelLabSourceRect,
   pixelLabTileIndex,
-  wangMatchingIndex,
   wangRectForIndex,
+  wangResolve,
   type FifteenShape,
   type Neighbors,
 } from "./ruleTile.ts";
 
 export type SandboxLayout =
   | { kind: "fifteen"; shape: FifteenShape }
-  | { kind: "wang"; edgeBand: boolean }
+  | { kind: "wang"; tall: boolean }
   | { kind: "godot" };
 
 export const FIFTEEN_LAYOUT: SandboxLayout = { kind: "fifteen", shape: "3x5" };
@@ -116,7 +116,7 @@ export function sandboxTileIndex(
   if (x < 0 || y < 0 || x >= size || y >= size) return null;
   if (cells[y * size + x] !== 1) return null;
   if (layout.kind === "wang") {
-    return wangMatchingIndex(cellNeighbors(cells, x, y, size), layout.edgeBand) ?? 0;
+    return wangResolve(cellNeighbors(cells, x, y, size), layout.tall).index;
   }
   const mask = layout.kind === "godot"
     ? blobMaskAt(cells, x, y, size)
@@ -135,8 +135,8 @@ export function sandboxSourceRect(
   const index = sandboxTileIndex(cells, x, y, size, layout);
   if (index === null) return null;
   if (layout.kind === "wang") {
-    const mask = index >= 20 ? index - 20 : index;
-    return { ...wangRectForIndex(index, tileSize), mask };
+    const resolved = wangResolve(cellNeighbors(cells, x, y, size), layout.tall);
+    return { ...wangRectForIndex(resolved.index, tileSize), mask: resolved.mask };
   }
   const mask = layout.kind === "godot"
     ? blobMaskAt(cells, x, y, size)
