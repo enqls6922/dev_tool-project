@@ -1,7 +1,7 @@
 "use client";
 
 import { Grid3x3, X } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { DropZone } from "@/components/DropZone";
 import { GhostPixelToggle } from "@/components/GhostPixelToggle";
 import { HelpTip } from "@/components/HelpTip";
@@ -17,6 +17,7 @@ import {
   RULE_TILE_SIZES,
   type NeighborValue,
   type Neighbors,
+  type RuleDataFile,
   type RulePreset,
   type RuleTileSize,
 } from "@/lib/ruleTile";
@@ -27,15 +28,9 @@ export function RuleTileForge() {
   const preset = PRESET_INFO[forge.preset];
   const data = forge.analysis?.data ?? null;
   const previewError = forge.error ?? forge.analysis?.error ?? null;
-  const sandboxLayout: SandboxLayout = data?.preset === "wang"
-    ? { kind: "wang", doubled: data.doubleHeight }
-    : FIFTEEN_LAYOUT;
-  const canSample = Boolean(
-    data && (
-      (data.preset === "15-tileset" && data.columns === 4 && data.rows >= 4)
-      || (data.preset === "wang" && data.columns === 5 && (data.rows === 4 || data.rows >= 8))
-    ),
-  );
+  const sandboxLayout = useMemo(() => layoutFor(data), [data]);
+  const canSample = Boolean(data);
+  const sampleTileSize = data?.tileSize ?? forge.tileSize;
 
   return (
     <div className="flex flex-col gap-6">
@@ -67,31 +62,21 @@ export function RuleTileForge() {
                 <span className="font-normal tracking-normal text-[#6f788a] normal-case">Preset</span>
                 <HelpTip
                   label="레이아웃 선택 안내"
-                  text="PixelLab에서 다운로드할 때 선택한 레이아웃과 동일한 포맷을 골라주세요. 잘 모르겠다면 기본값인 '15-tileset'을 권장합니다."
+                  text="PixelLab 다운로드 버튼과 같은 이름을 고릅니다. 시트를 올리면 가로·세로 비율로 프리셋을 고르고, 지금 프리셋이 맞으면 그대로 둡니다."
                 />
               </legend>
-              <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="레이아웃 선택">
-                {RULE_PRESETS.map((id) => {
-                  const info = PRESET_INFO[id];
-                  const selected = forge.preset === id;
-                  return (
-                    <button
-                      key={id}
-                      type="button"
-                      role="radio"
-                      aria-checked={selected}
-                      onClick={() => forge.setPreset(id satisfies RulePreset)}
-                      className={`h-12 rounded-lg border px-1 text-xs font-medium transition sm:text-sm ${
-                        selected
-                          ? "border-[#e39b4b] bg-[#e39b4b]/15 text-[#f3d2a8]"
-                          : "border-[#2a3140] bg-[#0d1016] text-[#c5cbd6] hover:border-[#465066]"
-                      }`}
-                    >
-                      {info.label}
-                    </button>
-                  );
-                })}
-              </div>
+              <select
+                aria-label="레이아웃 선택"
+                value={forge.preset}
+                onChange={(event) => forge.setPreset(event.target.value as RulePreset)}
+                className="h-12 w-full rounded-lg border border-[#2a3140] bg-[#0d1016] px-3 text-sm text-[#ece7df] outline-none focus:border-[#e39b4b]"
+              >
+                {RULE_PRESETS.map((id) => (
+                  <option key={id} value={id}>
+                    {PRESET_INFO[id].label}
+                  </option>
+                ))}
+              </select>
               <p className="mt-2 text-xs leading-5 text-[#6f788a]">{preset.hint}</p>
             </fieldset>
 
@@ -185,7 +170,7 @@ export function RuleTileForge() {
         <div className="flex flex-col gap-4">
         <TileSandbox
           previewUrl={forge.previewUrl}
-          tileSize={forge.tileSize}
+          tileSize={sampleTileSize}
           canSample={canSample}
           layout={sandboxLayout}
         />
@@ -193,7 +178,7 @@ export function RuleTileForge() {
           previewUrl={forge.previewUrl}
           width={forge.imageSize?.width ?? 0}
           height={forge.imageSize?.height ?? 0}
-          tileSize={forge.tileSize}
+          tileSize={sampleTileSize}
           cells={forge.analysis?.cells ?? []}
           activeIndex={activeIndex}
           loading={forge.loading}
@@ -209,6 +194,13 @@ export function RuleTileForge() {
       </div>
     </div>
   );
+}
+
+function layoutFor(data: RuleDataFile | null): SandboxLayout {
+  if (!data) return FIFTEEN_LAYOUT;
+  if (data.preset === "wang") return { kind: "wang", doubled: data.doubleHeight };
+  if (data.preset === "godot-47") return { kind: "godot" };
+  return { kind: "fifteen", shape: data.columns === 4 ? "4x4" : "3x5" };
 }
 
 function RuleTable({

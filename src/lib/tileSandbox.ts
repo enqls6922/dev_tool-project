@@ -1,10 +1,17 @@
-import { pixelLabSourceRect, pixelLabTileIndex, wangSourceRect } from "./ruleTile.ts";
+import {
+  godotSourceRect,
+  pixelLabSourceRect,
+  pixelLabTileIndex,
+  wangSourceRect,
+  type FifteenShape,
+} from "./ruleTile.ts";
 
 export type SandboxLayout =
-  | { kind: "fifteen" }
-  | { kind: "wang"; doubled: boolean };
+  | { kind: "fifteen"; shape: FifteenShape }
+  | { kind: "wang"; doubled: boolean }
+  | { kind: "godot" };
 
-export const FIFTEEN_LAYOUT: SandboxLayout = { kind: "fifteen" };
+export const FIFTEEN_LAYOUT: SandboxLayout = { kind: "fifteen", shape: "3x5" };
 
 export const SANDBOX_SIZE = 8;
 export const SANDBOX_CELL_PX = 32;
@@ -56,7 +63,9 @@ export function cellsTouchedByEdit(
 }
 
 function sheetIndexForMask(mask: number, layout: SandboxLayout): number {
-  return layout.kind === "wang" ? wangSourceRect(mask, 1, layout.doubled).index : pixelLabTileIndex(mask);
+  if (layout.kind === "wang") return wangSourceRect(mask, 1, layout.doubled).index;
+  if (layout.kind === "godot") return godotSourceRect(mask, 1).index;
+  return pixelLabTileIndex(mask, layout.shape);
 }
 
 /** Filled cells map 1:1 onto the active PixelLab sheet. Empty cells draw nothing. */
@@ -69,7 +78,10 @@ export function sandboxTileIndex(
 ): number | null {
   if (x < 0 || y < 0 || x >= size || y >= size) return null;
   if (cells[y * size + x] !== 1) return null;
-  return sheetIndexForMask(cardinalMaskAt(cells, x, y, size), layout);
+  const mask = layout.kind === "godot"
+    ? blobMaskAt(cells, x, y, size)
+    : cardinalMaskAt(cells, x, y, size);
+  return sheetIndexForMask(mask, layout);
 }
 
 export function sandboxSourceRect(
@@ -82,11 +94,41 @@ export function sandboxSourceRect(
 ) {
   const index = sandboxTileIndex(cells, x, y, size, layout);
   if (index === null) return null;
-  const mask = cardinalMaskAt(cells, x, y, size);
+  const mask = layout.kind === "godot"
+    ? blobMaskAt(cells, x, y, size)
+    : cardinalMaskAt(cells, x, y, size);
   const source = layout.kind === "wang"
     ? wangSourceRect(mask, tileSize, layout.doubled)
-    : pixelLabSourceRect(mask, tileSize);
+    : layout.kind === "godot"
+      ? godotSourceRect(mask, tileSize)
+      : pixelLabSourceRect(mask, tileSize, layout.shape);
   return { ...source, mask };
+}
+
+/** 8-direction blob bits. N=1, NE=2, E=4, SE=8, S=16, SW=32, W=64, NW=128. */
+export function blobMaskAt(
+  cells: readonly number[],
+  x: number,
+  y: number,
+  size = SANDBOX_SIZE,
+): number {
+  if (x < 0 || y < 0 || x >= size || y >= size) return 0;
+  if (cells[y * size + x] !== 1) return 0;
+  const filled = (dx: number, dy: number) => {
+    const nx = x + dx;
+    const ny = y + dy;
+    return nx >= 0 && ny >= 0 && nx < size && ny < size && cells[ny * size + nx] === 1;
+  };
+  let mask = 0;
+  if (filled(0, -1)) mask |= 1;
+  if (filled(1, -1)) mask |= 2;
+  if (filled(1, 0)) mask |= 4;
+  if (filled(1, 1)) mask |= 8;
+  if (filled(0, 1)) mask |= 16;
+  if (filled(-1, 1)) mask |= 32;
+  if (filled(-1, 0)) mask |= 64;
+  if (filled(-1, -1)) mask |= 128;
+  return mask;
 }
 
 export function paintCell(

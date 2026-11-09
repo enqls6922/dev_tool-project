@@ -4,7 +4,7 @@ export const RULE_TILE_SIZES = [16, 32, 48, 64] as const;
 
 export type RuleTileSize = (typeof RULE_TILE_SIZES)[number];
 
-export const RULE_PRESETS = ["15-tileset", "wang", "godot-3x3"] as const;
+export const RULE_PRESETS = ["15-tileset", "godot-47", "wang"] as const;
 
 export type RulePreset = (typeof RULE_PRESETS)[number];
 
@@ -50,56 +50,90 @@ export type PresetInfo = {
 export const PRESET_INFO: Record<RulePreset, PresetInfo> = {
   "15-tileset": {
     id: "15-tileset",
-    label: "15-tileset",
-    columns: 4,
+    label: "PixelLab 15-tileset (3×5)",
+    columns: 3,
+    rows: 5,
+    hint: "PixelLab 15-tileset은 가로 3열·세로 5행, 총 15칸입니다. 인덱스 0–14가 코너 마스크 1–15이고, 각 마스크를 8방향 이웃 규칙으로 바꿉니다. NW=1, NE=2, SW=4, SE=8.",
+  },
+  "godot-47": {
+    id: "godot-47",
+    label: "PixelLab Godot (47-Blob 풀 타일)",
+    columns: 12,
     rows: 4,
-    hint: "PixelLab dual-grid 4×4. 12번은 빈 칸(기본 스프라이트), 6번은 내부 바닥입니다.",
+    hint: "Godot 3×3 minimal 표준 템플릿은 12×4(47타일, 빈 칸 1개)입니다. PixelLab Godot 다운로드가 기본 칸 24×8이면 2×2를 한 타일로 묶어 같은 템플릿으로 읽습니다. 대각 모서리까지 8방향을 검사합니다.",
   },
   wang: {
     id: "wang",
-    label: "Wang",
+    label: "PixelLab Wang (5×8, 40타일)",
     columns: 5,
-    rows: 4,
+    rows: 8,
     hint: "PixelLab Wang은 가로 5열입니다. 32px 정사각은 160×128(5×4), 세로 2배 트랜지션은 160×256(5×8, 40칸)입니다. NW=1, NE=2, SW=4, SE=8.",
-  },
-  "godot-3x3": {
-    id: "godot-3x3",
-    label: "Godot 3×3",
-    columns: 3,
-    rows: 3,
-    hint: "Godot 3×3 minimal. 가운데 4번이 내부 바닥이고, 모서리는 바깥 코너, 변은 직선 엣지입니다.",
   },
 };
 
+export type FifteenShape = "3x5" | "4x4";
+
 /**
- * Standard Godot / PixelLab dual-grid 15-tile sheet, row-major.
- * Index 12 is the empty cell. Index 6 is the full floor.
+ * PixelLab native dual-grid roles, row-major on a 4×4 sheet.
+ * Index 12 is empty (mask 0). Index 6 is the full floor (mask 15).
  * Bits: NW=1, NE=2, SW=4, SE=8.
  */
-export const FIFTEEN_TILE_MASKS = [
+export const NATIVE_16_MASKS = [
   4, 10, 13, 12,
   9, 14, 15, 7,
   2, 3, 11, 5,
   0, 8, 6, 1,
 ] as const;
 
-/** Sheet index whose PixelLab 15-tileset cell stores this mask. Masks 0–15 are a bijection. */
-export function pixelLabTileIndex(mask: number): number {
+/**
+ * PixelLab 15-tileset packed as 3 columns × 5 rows (indices 0–14).
+ * The native empty cell is omitted. Order follows the native 4×4 with that cell removed.
+ */
+export const FIFTEEN_TILE_MASKS = [
+  4, 10, 13,
+  12, 9, 14,
+  15, 7, 2,
+  3, 11, 5,
+  8, 6, 1,
+] as const;
+
+export const FIFTEEN_COLUMNS = 3;
+export const FIFTEEN_ROWS = 5;
+
+export function fifteenShape(columns: number, rows: number): FifteenShape | null {
+  if (columns === FIFTEEN_COLUMNS && rows >= FIFTEEN_ROWS) return "3x5";
+  if (columns === 4 && rows >= 4) return "4x4";
+  return null;
+}
+
+function fifteenMasks(shape: FifteenShape): readonly number[] {
+  return shape === "4x4" ? NATIVE_16_MASKS : FIFTEEN_TILE_MASKS;
+}
+
+function fifteenColumns(shape: FifteenShape): number {
+  return shape === "4x4" ? 4 : FIFTEEN_COLUMNS;
+}
+
+/** Sheet index whose PixelLab 15-tileset cell stores this mask. */
+export function pixelLabTileIndex(mask: number, shape: FifteenShape = "3x5"): number {
   if (!Number.isInteger(mask) || mask < 0 || mask > 15) {
     throw new Error("타일 마스크는 0부터 15까지입니다.");
   }
-  const index = (FIFTEEN_TILE_MASKS as readonly number[]).indexOf(mask);
-  if (index < 0) throw new Error("PixelLab 15-tileset에 없는 마스크입니다.");
-  return index;
+  const masks = fifteenMasks(shape);
+  const index = masks.indexOf(mask);
+  if (index >= 0) return index;
+  if (shape === "3x5" && mask === 0) return masks.indexOf(15);
+  throw new Error("PixelLab 15-tileset에 없는 마스크입니다.");
 }
 
-export function pixelLabSourceRect(mask: number, tileSize: number) {
+export function pixelLabSourceRect(mask: number, tileSize: number, shape: FifteenShape = "3x5") {
   if (!Number.isInteger(tileSize) || tileSize <= 0) {
     throw new Error("타일 크기는 양의 정수여야 합니다.");
   }
-  const index = pixelLabTileIndex(mask);
-  const column = index % 4;
-  const row = Math.floor(index / 4);
+  const index = pixelLabTileIndex(mask, shape);
+  const columns = fifteenColumns(shape);
+  const column = index % columns;
+  const row = Math.floor(index / columns);
   return {
     index,
     x: column * tileSize,
@@ -170,6 +204,195 @@ export function wangSourceRect(mask: number, tileSize: number, doubled: boolean)
     width: tileSize,
     height: doubled ? tileSize * 2 : tileSize,
   };
+}
+
+/** Godot 3×3 minimal / PixelLab Godot sheet. 12×4 template, one cell unused. */
+export const GODOT_COLUMNS = 12;
+export const GODOT_ROWS = 4;
+export const GODOT_FULL_MASK = 255;
+
+/** 8-direction blob bits. A corner counts only when both adjacent sides are set. */
+export const BLOB = {
+  N: 1,
+  NE: 2,
+  E: 4,
+  SE: 8,
+  S: 16,
+  SW: 32,
+  W: 64,
+  NW: 128,
+} as const;
+
+/**
+ * Corner-state key → cell in Godot's 12×4 3×3-minimal template.
+ * States are TL,TR,BL,BR. 0 outer, 1 side A, 2 side B, 3 concave, 4 filled.
+ * (10, 1) is the unused cell and is absent.
+ */
+const GODOT_TEMPLATE: Readonly<Record<string, { column: number; row: number }>> = {
+  "0,0,0,0": { column: 0, row: 3 },
+  "0,0,1,1": { column: 0, row: 0 },
+  "0,2,0,2": { column: 1, row: 3 },
+  "0,2,1,3": { column: 1, row: 0 },
+  "0,2,1,4": { column: 8, row: 0 },
+  "1,1,0,0": { column: 0, row: 2 },
+  "1,1,1,1": { column: 0, row: 1 },
+  "1,3,0,2": { column: 1, row: 2 },
+  "1,3,1,3": { column: 1, row: 1 },
+  "1,3,1,4": { column: 4, row: 1 },
+  "1,4,0,2": { column: 8, row: 3 },
+  "1,4,1,3": { column: 4, row: 2 },
+  "1,4,1,4": { column: 8, row: 1 },
+  "2,0,2,0": { column: 3, row: 3 },
+  "2,0,3,1": { column: 3, row: 0 },
+  "2,0,4,1": { column: 11, row: 0 },
+  "2,2,2,2": { column: 2, row: 3 },
+  "2,2,3,3": { column: 2, row: 0 },
+  "2,2,3,4": { column: 5, row: 0 },
+  "2,2,4,3": { column: 6, row: 0 },
+  "2,2,4,4": { column: 10, row: 0 },
+  "3,1,2,0": { column: 3, row: 2 },
+  "3,1,3,1": { column: 3, row: 1 },
+  "3,1,4,1": { column: 7, row: 1 },
+  "3,3,2,2": { column: 2, row: 2 },
+  "3,3,3,3": { column: 2, row: 1 },
+  "3,3,3,4": { column: 7, row: 3 },
+  "3,3,4,3": { column: 4, row: 3 },
+  "3,3,4,4": { column: 9, row: 0 },
+  "3,4,2,2": { column: 5, row: 3 },
+  "3,4,3,3": { column: 7, row: 0 },
+  "3,4,3,4": { column: 8, row: 2 },
+  "3,4,4,3": { column: 9, row: 1 },
+  "3,4,4,4": { column: 5, row: 1 },
+  "4,1,2,0": { column: 11, row: 3 },
+  "4,1,3,1": { column: 7, row: 2 },
+  "4,1,4,1": { column: 11, row: 2 },
+  "4,3,2,2": { column: 6, row: 3 },
+  "4,3,3,3": { column: 4, row: 0 },
+  "4,3,3,4": { column: 10, row: 2 },
+  "4,3,4,3": { column: 11, row: 1 },
+  "4,3,4,4": { column: 6, row: 1 },
+  "4,4,2,2": { column: 9, row: 3 },
+  "4,4,3,3": { column: 10, row: 3 },
+  "4,4,3,4": { column: 5, row: 2 },
+  "4,4,4,3": { column: 6, row: 2 },
+  "4,4,4,4": { column: 9, row: 2 },
+};
+
+export function canonicalBlobMask(mask: number): number {
+  const side = BLOB.N | BLOB.E | BLOB.S | BLOB.W;
+  let canonical = mask & side;
+  if ((mask & BLOB.NE) !== 0 && (mask & BLOB.N) !== 0 && (mask & BLOB.E) !== 0) canonical |= BLOB.NE;
+  if ((mask & BLOB.SE) !== 0 && (mask & BLOB.S) !== 0 && (mask & BLOB.E) !== 0) canonical |= BLOB.SE;
+  if ((mask & BLOB.SW) !== 0 && (mask & BLOB.S) !== 0 && (mask & BLOB.W) !== 0) canonical |= BLOB.SW;
+  if ((mask & BLOB.NW) !== 0 && (mask & BLOB.N) !== 0 && (mask & BLOB.W) !== 0) canonical |= BLOB.NW;
+  return canonical;
+}
+
+function cornerState(mask: number, sideA: number, sideB: number, corner: number): number {
+  const a = (mask & sideA) !== 0;
+  const b = (mask & sideB) !== 0;
+  if (!a && !b) return 0;
+  if (a && !b) return 1;
+  if (!a && b) return 2;
+  return (mask & corner) !== 0 ? 4 : 3;
+}
+
+function godotStateKey(mask: number): string {
+  const tl = cornerState(mask, BLOB.N, BLOB.W, BLOB.NW);
+  const tr = cornerState(mask, BLOB.N, BLOB.E, BLOB.NE);
+  const bl = cornerState(mask, BLOB.S, BLOB.W, BLOB.SW);
+  const br = cornerState(mask, BLOB.S, BLOB.E, BLOB.SE);
+  return `${tl},${tr},${bl},${br}`;
+}
+
+export function godotCellForMask(mask: number): { index: number; column: number; row: number } {
+  const canonical = canonicalBlobMask(mask);
+  const cell = GODOT_TEMPLATE[godotStateKey(canonical)];
+  if (!cell) throw new Error("Godot 47-Blob 템플릿에 없는 이웃입니다.");
+  return {
+    index: cell.row * GODOT_COLUMNS + cell.column,
+    column: cell.column,
+    row: cell.row,
+  };
+}
+
+export function godotSourceRect(mask: number, tileSize: number) {
+  if (!Number.isInteger(tileSize) || tileSize <= 0) {
+    throw new Error("타일 크기는 양의 정수여야 합니다.");
+  }
+  const cell = godotCellForMask(mask);
+  return {
+    index: cell.index,
+    x: cell.column * tileSize,
+    y: cell.row * tileSize,
+    width: tileSize,
+    height: tileSize,
+  };
+}
+
+export function neighborsFromBlobMask(mask: number): Neighbors {
+  const canonical = canonicalBlobMask(mask);
+  const side = (bit: number): NeighborValue => ((canonical & bit) !== 0 ? 1 : 2);
+  const corner = (bit: number, sideA: number, sideB: number): NeighborValue => {
+    if ((canonical & sideA) === 0 || (canonical & sideB) === 0) return 0;
+    return (canonical & bit) !== 0 ? 1 : 2;
+  };
+  return {
+    Top: side(BLOB.N),
+    Bottom: side(BLOB.S),
+    Left: side(BLOB.W),
+    Right: side(BLOB.E),
+    TopLeft: corner(BLOB.NW, BLOB.N, BLOB.W),
+    TopRight: corner(BLOB.NE, BLOB.N, BLOB.E),
+    BottomLeft: corner(BLOB.SW, BLOB.S, BLOB.W),
+    BottomRight: corner(BLOB.SE, BLOB.S, BLOB.E),
+  };
+}
+
+const PRESET_SHAPES: readonly { preset: RulePreset; columns: number; rows: number }[] = [
+  { preset: "15-tileset", columns: 3, rows: 5 },
+  { preset: "15-tileset", columns: 4, rows: 4 },
+  { preset: "15-tileset", columns: 4, rows: 8 },
+  { preset: "godot-47", columns: 12, rows: 4 },
+  { preset: "godot-47", columns: 24, rows: 8 },
+  { preset: "wang", columns: 5, rows: 8 },
+  { preset: "wang", columns: 5, rows: 4 },
+];
+
+/** Pick the PixelLab preset whose column:row ratio is closest to the uploaded sheet. */
+export function detectPreset(width: number, height: number, tileSize: number): RulePreset | null {
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) return null;
+  if (Number.isInteger(tileSize) && tileSize > 0 && width % tileSize === 0 && height % tileSize === 0) {
+    const columns = width / tileSize;
+    const rows = height / tileSize;
+    const exact = PRESET_SHAPES.find((shape) => shape.columns === columns && shape.rows === rows);
+    if (exact) return exact.preset;
+    const taller = PRESET_SHAPES
+      .filter((shape) => shape.columns === columns && rows >= shape.rows)
+      .sort((a, b) => b.rows - a.rows);
+    if (taller[0]) return taller[0].preset;
+  }
+  const ratio = width / height;
+  let best: { preset: RulePreset; error: number } | null = null;
+  for (const shape of PRESET_SHAPES) {
+    const error = Math.abs(ratio - shape.columns / shape.rows);
+    if (!best || error < best.error) best = { preset: shape.preset, error };
+  }
+  return best && best.error <= 0.08 ? best.preset : null;
+}
+
+export function suggestPreset(
+  width: number,
+  height: number,
+  tileSize: number,
+  current: RulePreset,
+): RulePreset {
+  const detected = detectPreset(width, height, tileSize);
+  if (!detected || detected === current) return current;
+  const currentFits = analyzeSheet({ width, height, tileSize, preset: current }).error === null;
+  if (currentFits) return current;
+  const detectedFits = analyzeSheet({ width, height, tileSize, preset: detected }).error === null;
+  return detectedFits ? detected : current;
 }
 
 const CORNER_BITS = [
@@ -251,18 +474,6 @@ type Slot = {
   fallback: boolean;
 };
 
-const GODOT_3X3: readonly { name: string; label: string; neighbors: Neighbors }[] = [
-  { name: "outer_nw", label: "바깥 코너", neighbors: pattern(2, 1, 2, 1, 2, 2, 2, 1) },
-  { name: "edge_n", label: "직선 엣지", neighbors: pattern(2, 1, 1, 1, 2, 2, 1, 1) },
-  { name: "outer_ne", label: "바깥 코너", neighbors: pattern(2, 1, 1, 2, 2, 2, 1, 2) },
-  { name: "edge_w", label: "직선 엣지", neighbors: pattern(1, 1, 2, 1, 2, 1, 2, 1) },
-  { name: "floor", label: "내부 바닥", neighbors: pattern(1, 1, 1, 1, 1, 1, 1, 1) },
-  { name: "edge_e", label: "직선 엣지", neighbors: pattern(1, 1, 1, 2, 1, 2, 1, 2) },
-  { name: "outer_sw", label: "바깥 코너", neighbors: pattern(1, 2, 2, 1, 2, 1, 2, 2) },
-  { name: "edge_s", label: "직선 엣지", neighbors: pattern(1, 2, 1, 1, 1, 1, 2, 2) },
-  { name: "outer_se", label: "바깥 코너", neighbors: pattern(1, 2, 1, 2, 1, 2, 2, 2) },
-];
-
 export function emptyNeighbors(): Neighbors {
   return {
     Top: 0,
@@ -273,28 +484,6 @@ export function emptyNeighbors(): Neighbors {
     TopRight: 0,
     BottomLeft: 0,
     BottomRight: 0,
-  };
-}
-
-function pattern(
-  top: NeighborValue,
-  bottom: NeighborValue,
-  left: NeighborValue,
-  right: NeighborValue,
-  topLeft: NeighborValue,
-  topRight: NeighborValue,
-  bottomLeft: NeighborValue,
-  bottomRight: NeighborValue,
-): Neighbors {
-  return {
-    Top: top,
-    Bottom: bottom,
-    Left: left,
-    Right: right,
-    TopLeft: topLeft,
-    TopRight: topRight,
-    BottomLeft: bottomLeft,
-    BottomRight: bottomRight,
   };
 }
 
@@ -413,32 +602,70 @@ function bitCount(mask: number): number {
   return count;
 }
 
-function slotsForPreset(preset: RulePreset): Slot[] {
-  if (preset === "godot-3x3") {
-    return GODOT_3X3.map((tile, index) => ({
-      index,
-      mask: -1,
-      name: tile.name,
-      label: tile.label,
-      neighbors: tile.neighbors,
-      rule: true,
-      fallback: index === 4,
-    }));
+function blobLabel(mask: number): string {
+  const canonical = canonicalBlobMask(mask);
+  if (canonical === 0) return "고립";
+  if (canonical === GODOT_FULL_MASK) return "내부 바닥";
+  const sides = [BLOB.N, BLOB.E, BLOB.S, BLOB.W].filter((bit) => (canonical & bit) !== 0).length;
+  const corners = [BLOB.NE, BLOB.SE, BLOB.SW, BLOB.NW].filter((bit) => (canonical & bit) !== 0).length;
+  if (sides === 1 && corners === 0) return "끝";
+  if (sides === 2 && corners === 0) {
+    const opposite = (canonical & BLOB.N) !== 0 && (canonical & BLOB.S) !== 0
+      || (canonical & BLOB.E) !== 0 && (canonical & BLOB.W) !== 0;
+    return opposite ? "직선 통로" : "바깥 코너";
   }
+  if (corners > 0 && sides === 2) return "안쪽 코너";
+  if (sides === 3) return "삼면";
+  if (sides === 4) return corners === 4 ? "내부 바닥" : "오목 모서리";
+  return "패턴";
+}
 
-  if (preset === "wang") {
-    throw new Error("Wang 슬롯은 시트 높이에 따라 wangSlots로 만듭니다.");
-  }
+function blobName(mask: number): string {
+  const canonical = canonicalBlobMask(mask);
+  if (canonical === 0) return "isolated";
+  if (canonical === GODOT_FULL_MASK) return "floor";
+  return `blob_${canonical.toString(16).padStart(2, "0")}`;
+}
 
-  return FIFTEEN_TILE_MASKS.map((mask, index) => ({
+function fifteenSlots(shape: FifteenShape): Slot[] {
+  return fifteenMasks(shape).map((mask, index) => ({
     index,
     mask,
     name: cornerName(mask),
     label: cornerLabel(mask),
     neighbors: neighborsFromCornerMask(mask),
     rule: mask !== 0,
-    fallback: mask === 0,
+    fallback: shape === "4x4" ? mask === 0 : mask === 15,
   }));
+}
+
+function godotSlots(): Slot[] {
+  const seen = new Set<number>();
+  const slots: Slot[] = [];
+  for (let mask = 0; mask < 256; mask += 1) {
+    const canonical = canonicalBlobMask(mask);
+    if (seen.has(canonical)) continue;
+    seen.add(canonical);
+    const cell = godotCellForMask(canonical);
+    slots.push({
+      index: cell.index,
+      mask: canonical,
+      name: blobName(canonical),
+      label: blobLabel(canonical),
+      neighbors: neighborsFromBlobMask(canonical),
+      rule: true,
+      fallback: canonical === GODOT_FULL_MASK,
+    });
+  }
+  return slots;
+}
+
+function slotsForPreset(preset: RulePreset, shape: FifteenShape): Slot[] {
+  if (preset === "godot-47") return godotSlots();
+  if (preset === "wang") {
+    throw new Error("Wang 슬롯은 시트 높이에 따라 wangSlots로 만듭니다.");
+  }
+  return fifteenSlots(shape);
 }
 
 function wangSlots(doubled: boolean): Slot[] {
@@ -498,38 +725,80 @@ export function analyzeSheet(input: {
     };
   }
 
-  const columns = input.width / input.tileSize;
-  const rows = input.height / input.tileSize;
-  const cells = sliceSheet(input.width, input.height, input.tileSize);
+  const baseColumns = input.width / input.tileSize;
+  const baseRows = input.height / input.tileSize;
   const preset = PRESET_INFO[input.preset];
-  const base = { columns, rows, cells, data: null, warning: null };
-
-  if (columns !== preset.columns) {
-    return {
-      ...base,
-      error: `${preset.label} 프리셋은 가로 ${preset.columns}칸입니다. 이 시트는 ${columns}칸입니다.`,
-    };
-  }
-
+  let sliceSize = input.tileSize;
+  let columns = baseColumns;
+  let rows = baseRows;
   let mappedRows = preset.rows;
   let doubled = false;
-  if (input.preset === "wang") {
-    if (rows !== WANG_LOGICAL_ROWS && rows < WANG_LOGICAL_ROWS * 2) {
+  let shape: FifteenShape = "3x5";
+
+  if (input.preset === "15-tileset") {
+    const found = fifteenShape(baseColumns, baseRows);
+    if (!found) {
+      const cells = sliceSheet(input.width, input.height, input.tileSize);
       return {
-        ...base,
-        error: `${preset.label} 프리셋은 세로 4칸(정사각) 또는 8칸(세로 2배)입니다. 현재 ${rows}칸입니다.`,
+        columns: baseColumns,
+        rows: baseRows,
+        cells,
+        data: null,
+        warning: null,
+        error: `PixelLab 15-tileset은 3×5(15칸)입니다. 이 시트는 ${baseColumns}×${baseRows}칸입니다.`,
       };
     }
-    doubled = wangDoubled(rows);
-    mappedRows = wangMappedRows(rows);
-  } else if (rows < preset.rows) {
+    shape = found;
+    mappedRows = found === "3x5" ? FIFTEEN_ROWS : 4;
+  } else if (input.preset === "godot-47") {
+    const doubledSheet = baseColumns === GODOT_COLUMNS * 2 && baseRows >= GODOT_ROWS * 2
+      && input.height % (input.tileSize * 2) === 0;
+    if (doubledSheet) {
+      sliceSize = input.tileSize * 2;
+      columns = input.width / sliceSize;
+      rows = input.height / sliceSize;
+      mappedRows = GODOT_ROWS;
+    } else if (baseColumns === GODOT_COLUMNS && baseRows >= GODOT_ROWS) {
+      mappedRows = GODOT_ROWS;
+    } else {
+      const cells = sliceSheet(input.width, input.height, input.tileSize);
+      return {
+        columns: baseColumns,
+        rows: baseRows,
+        cells,
+        data: null,
+        warning: null,
+        error: `PixelLab Godot 47-Blob은 12×4 템플릿이거나 기본 칸 24×8 시트입니다. 이 시트는 ${baseColumns}×${baseRows}칸입니다.`,
+      };
+    }
+  } else if (baseColumns !== WANG_COLUMNS) {
+    const cells = sliceSheet(input.width, input.height, input.tileSize);
     return {
-      ...base,
-      error: `${preset.label} 프리셋은 세로 ${preset.rows}칸이 필요합니다. 현재 ${rows}칸입니다.`,
+      columns: baseColumns,
+      rows: baseRows,
+      cells,
+      data: null,
+      warning: null,
+      error: `${preset.label} 프리셋은 가로 ${WANG_COLUMNS}칸입니다. 이 시트는 ${baseColumns}칸입니다.`,
     };
+  } else if (baseRows !== WANG_LOGICAL_ROWS && baseRows < WANG_LOGICAL_ROWS * 2) {
+    const cells = sliceSheet(input.width, input.height, input.tileSize);
+    return {
+      columns: baseColumns,
+      rows: baseRows,
+      cells,
+      data: null,
+      warning: null,
+      error: `${preset.label} 프리셋은 세로 4칸(정사각) 또는 8칸(세로 2배)입니다. 현재 ${baseRows}칸입니다.`,
+    };
+  } else {
+    doubled = wangDoubled(baseRows);
+    mappedRows = wangMappedRows(baseRows);
   }
 
-  const slots = input.preset === "wang" ? wangSlots(doubled) : slotsForPreset(input.preset);
+  const cells = sliceSheet(input.width, input.height, sliceSize);
+  const base = { columns, rows, cells, data: null, warning: null };
+  const slots = input.preset === "wang" ? wangSlots(doubled) : slotsForPreset(input.preset, shape);
   const slotByIndex = new Map(slots.map((slot) => [slot.index, slot]));
   const fallback = slots.find((slot) => slot.fallback);
   if (!fallback) {
@@ -593,7 +862,7 @@ export function analyzeSheet(input: {
       version: 1,
       kind: "unity-rule-tile",
       preset: input.preset,
-      tileSize: input.tileSize,
+      tileSize: sliceSize,
       image: "Tileset.png",
       columns,
       rows,
@@ -617,10 +886,15 @@ export function buildRuleTileScript(): string {
 // Rules are stored in check order. Unity uses the first match, then m_DefaultSprite.
 // Corner sheets (15-tileset, Wang) mark the three cells around each filled corner as This
 // and leave the rest Ignore, with stricter rules first.
+// PixelLab 15-tileset is 3 columns by 5 rows (indices 0-14). A native 4x4 or 4x8
+// sheet is accepted too and keeps the 16-role order.
 // Wang sheets are 5 columns. Square tiles use 4 rows. A double-height transition
 // sheet is 8 rows (40 cells); doubleHeight makes each even row's sprite two cells tall
 // and RuleData.json indexes that 5x8 grid. The lower half keeps the same mask.
-// Godot 3x3 marks every direction This or NotThis.
+// Godot 47-blob is the 12x4 3x3-minimal template (47 rules). A PixelLab Godot
+// download that is 24x8 base cells is sliced as that template at twice the tile size.
+// Each rule sets the four sides to This or NotThis. A diagonal is This or NotThis
+// only when both adjacent sides are This; otherwise the corner is Ignore.
 #if UNITY_EDITOR
 using System;
 using System.Collections.Generic;

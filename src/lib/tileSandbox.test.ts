@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { FIFTEEN_TILE_MASKS, pixelLabTileIndex, wangIndexForMask } from "./ruleTile.ts";
+import { FIFTEEN_TILE_MASKS, godotCellForMask, pixelLabTileIndex, wangIndexForMask } from "./ruleTile.ts";
 import {
   CARDINAL,
   cardinalMaskAt,
@@ -11,16 +11,18 @@ import {
   sandboxTileIndex,
 } from "./tileSandbox.ts";
 
-test("every cardinal mask maps to exactly one PixelLab 15-tileset index", () => {
+test("every cardinal mask maps onto the 3x5 PixelLab sheet", () => {
   const seen = new Set<number>();
-  for (let mask = 0; mask < 16; mask += 1) {
+  for (let mask = 1; mask < 16; mask += 1) {
     const index = pixelLabTileIndex(mask);
     assert.equal(FIFTEEN_TILE_MASKS[index], mask);
     seen.add(index);
   }
-  assert.equal(seen.size, 16);
-  assert.equal(pixelLabTileIndex(0), 12);
+  assert.equal(seen.size, 15);
+  assert.equal(pixelLabTileIndex(0), pixelLabTileIndex(15));
   assert.equal(pixelLabTileIndex(15), 6);
+  assert.equal(pixelLabTileIndex(0, "4x4"), 12);
+  assert.equal(pixelLabTileIndex(15, "4x4"), 6);
 });
 
 test("painting a cell refreshes that cell and its four neighbors", () => {
@@ -77,4 +79,29 @@ test("a 5x8 Wang sheet crops the full logical tile instead of the mask number", 
     { x: 32, y: 64, width: 32, height: 64 },
   );
   assert.notEqual(full.index, full.mask);
+});
+
+test("a Godot sandbox cell samples the 47-blob template", () => {
+  let cells = emptySandbox();
+  cells = paintCell(cells, 2, 2, 1);
+  const layout = { kind: "godot" as const };
+  const alone = sandboxSourceRect(cells, 2, 2, 32, 8, layout);
+  assert.ok(alone);
+  assert.equal(alone.mask, 0);
+  assert.equal(alone.index, godotCellForMask(0).index);
+  assert.equal(sandboxTileIndex(cells, 2, 2, 8, layout), alone.index);
+
+  cells = paintCell(cells, 3, 2, 1);
+  cells = paintCell(cells, 2, 3, 1);
+  cells = paintCell(cells, 3, 3, 1);
+  const corner = sandboxSourceRect(cells, 2, 2, 32, 8, layout);
+  assert.ok(corner);
+  const mask = 4 | 8 | 16;
+  assert.equal(corner.mask, mask);
+  assert.equal(corner.index, godotCellForMask(mask).index);
+  assert.equal(sandboxTileIndex(cells, 2, 2, 8, layout), corner.index);
+  assert.deepEqual(
+    { x: corner.x, y: corner.y, width: corner.width, height: corner.height },
+    { x: (corner.index % 12) * 32, y: Math.floor(corner.index / 12) * 32, width: 32, height: 32 },
+  );
 });
