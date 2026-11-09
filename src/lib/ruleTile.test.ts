@@ -5,7 +5,6 @@ import {
   DIRECTION_KEYS,
   FIFTEEN_TILE_MASKS,
   NATIVE_16_MASKS,
-  WANG_MASK_ROWS,
   actualFromCornerMask,
   analyzeSheet,
   buildRuleTileScript,
@@ -20,7 +19,10 @@ import {
   tileSpriteName,
   unitySliceRect,
   wangCellMask,
+  wangCornerLabel,
+  wangEdgeIndex,
   wangIndexForMask,
+  wangMatchingIndex,
   wangSourceRect,
   type Neighbors,
 } from "./ruleTile.ts";
@@ -98,7 +100,7 @@ test("a native 4x4 15-tileset still emits 15 rules in strictest-first order", ()
   assert.match(json, /"BottomRight":/);
 });
 
-test("PixelLab Wang accepts a 5-column sheet and maps every 5x8 cell", () => {
+test("PixelLab Wang 5x8 uses the 2-corner index instead of the 15-tileset table", () => {
   const square = analyzeSheet({ width: 160, height: 128, tileSize: 32, preset: "wang" });
   assert.equal(square.error, null);
   assert.equal(square.warning, null);
@@ -109,12 +111,13 @@ test("PixelLab Wang accepts a 5-column sheet and maps every 5x8 cell", () => {
   assert.equal(squareData.doubleHeight, false);
   assert.equal(squareData.cells.length, 20);
   assert.equal(squareData.rules.length, 15);
-  assert.equal(squareData.defaultSpriteIndex, wangIndexForMask(0, false));
-  assert.equal(squareData.cells[16]?.mask, 0);
-  assert.equal(squareData.cells[16]?.role, "default");
-  assert.equal(squareData.cells[17]?.role, "unmapped");
-  assert.equal(squareData.cells[15]?.role, "paired");
+  assert.equal(squareData.defaultSpriteIndex, 0);
+  assert.equal(squareData.cells[0]?.role, "default");
+  assert.equal(squareData.cells[0]?.label, "고립 단독");
+  assert.equal(squareData.cells[15]?.role, "rule");
   assert.equal(squareData.cells[15]?.mask, 15);
+  assert.equal(squareData.cells[15]?.label, "내부 바닥");
+  assert.equal(squareData.cells[16]?.role, "unmapped");
 
   const tall = analyzeSheet({ width: 160, height: 256, tileSize: 32, preset: "wang" });
   assert.equal(tall.error, null);
@@ -123,57 +126,55 @@ test("PixelLab Wang accepts a 5-column sheet and maps every 5x8 cell", () => {
   assert.ok(data);
   assert.equal(data.columns, 5);
   assert.equal(data.rows, 8);
-  assert.equal(data.doubleHeight, true);
+  assert.equal(data.doubleHeight, false);
   assert.equal(data.cells.length, 40);
-  assert.equal(data.rules.length, 15);
-  assert.equal(data.defaultSpriteIndex, 31);
-  assert.equal(data.rules.some((rule) => rule.index === data.defaultSpriteIndex), false);
+  assert.equal(data.rules.length, 30);
+  assert.equal(data.defaultSpriteIndex, 0);
+  assert.equal(data.rules.some((rule) => rule.index === 0), false);
+  assert.equal(data.rules.some((rule) => rule.index === 11 && rule.label === "내부 바닥"), false);
 
-  for (let index = 0; index < 40; index += 1) {
-    const mask = wangCellMask(index, true);
-    assert.equal(data.cells[index]?.mask, mask);
-    if (mask < 0) {
-      assert.equal(data.cells[index]?.role, "unmapped");
-      continue;
+  for (let mask = 0; mask <= 15; mask += 1) {
+    assert.equal(wangIndexForMask(mask), mask);
+    assert.equal(wangCellMask(mask), mask);
+    assert.equal(data.cells[mask]?.mask, mask);
+    assert.equal(data.cells[mask]?.label, wangCornerLabel(mask));
+    assert.equal(data.cells[mask]?.role, mask === 0 ? "default" : "rule");
+    if (mask !== 0) {
+      const rule = data.rules.find((entry) => entry.index === mask);
+      assert.ok(rule);
+      assert.deepEqual(rule.neighbors, actualFromCornerMask(mask));
     }
-    const canonical = wangIndexForMask(mask, true);
-    if (index === canonical) {
-      assert.equal(data.cells[index]?.role, mask === 0 ? "default" : "rule");
-      if (mask !== 0) {
-        const rule = data.rules.find((entry) => entry.index === index);
-        assert.ok(rule);
-        assert.deepEqual(rule.neighbors, neighborsFromCornerMask(mask));
-      }
-    } else {
-      assert.equal(data.cells[index]?.role, "paired");
-      assert.deepEqual(data.cells[index]?.neighbors, neighborsFromCornerMask(mask));
-    }
+    const edgeIndex = wangEdgeIndex(mask);
+    assert.equal(wangCellMask(edgeIndex), mask);
+    assert.equal(data.cells[edgeIndex]?.mask, mask);
+    assert.equal(data.cells[edgeIndex]?.role, mask === 0 ? "paired" : "rule");
   }
 
-  assert.deepEqual(
-    WANG_MASK_ROWS[0],
-    [0, 1, 2, 3, 4].map((column) => wangCellMask(column, true)),
-  );
-  assert.equal(wangCellMask(0, true), wangCellMask(5, true));
-  assert.equal(data.cells[0]?.mask, 8);
-  assert.equal(data.cells[3]?.mask, 7);
-  assert.equal(data.cells[4]?.mask, 11);
-  assert.deepEqual(wangSourceRect(7, 32, true), { index: 3, x: 96, y: 0, width: 32, height: 64 });
-  assert.equal(wangSourceRect(10, 32, true).index, 10);
-  assert.equal(wangSourceRect(0, 32, true).index, 31);
+  assert.equal(data.cells[11]?.label, "안쪽 모서리");
+  assert.equal(data.cells[11]?.mask, 11);
+  assert.equal(data.cells[5]?.label, "세로 벽");
+  assert.equal(data.cells[10]?.label, "세로 벽");
+  assert.equal(data.cells[16]?.role, "unmapped");
+  assert.equal(data.cells[19]?.role, "unmapped");
+  assert.equal(data.cells[36]?.role, "unmapped");
+  assert.equal(data.cells[39]?.role, "unmapped");
+  assert.deepEqual(wangSourceRect(15, 32), { index: 15, x: 0, y: 96, width: 32, height: 32 });
+  assert.deepEqual(wangSourceRect(10, 32), { index: 10, x: 0, y: 64, width: 32, height: 32 });
+  assert.notEqual(wangCellMask(0), wangCellMask(5));
 
   let previous = Infinity;
   for (const rule of data.rules) {
-    const weight = countCondition(rule.neighbors, 1);
+    const weight = countCondition(rule.neighbors, 1) * 10 + countCondition(rule.neighbors, 2);
     assert.ok(weight <= previous);
     previous = weight;
   }
   assert.equal(data.rules[0]?.name, "floor");
-  assert.equal(data.rules[0]?.index, wangIndexForMask(15, true));
+  assert.equal(data.rules[0]?.index, 15);
   const json = JSON.stringify(data);
-  assert.match(json, /"doubleHeight":true/);
+  assert.match(json, /"doubleHeight":false/);
   assert.match(json, /"columns":5/);
   assert.match(json, /"rows":8/);
+  assert.equal(json.includes("tile_11") && data.cells[11]?.label === "내부 바닥", false);
 });
 
 test("corner rules resolve the exact mask before any looser subset", () => {
@@ -190,18 +191,23 @@ test("corner rules resolve the exact mask before any looser subset", () => {
       assert.equal(wangHit, null);
       assert.equal(nativeHit, null);
       assert.equal(packedHit, null);
-      assert.equal(wang.defaultSpriteIndex, wangIndexForMask(0, true));
+      assert.equal(wang.defaultSpriteIndex, 0);
       assert.equal(native.defaultSpriteIndex, 12);
       assert.equal(packed.defaultSpriteIndex, FIFTEEN_TILE_MASKS.indexOf(15));
       continue;
     }
-    assert.equal(wangHit, wangIndexForMask(mask, true));
+    assert.equal(wangHit, mask);
+    assert.equal(wangMatchingIndex(actualFromCornerMask(mask), true), mask);
     assert.equal(nativeHit, NATIVE_16_MASKS.indexOf(mask as (typeof NATIVE_16_MASKS)[number]));
     assert.equal(packedHit, FIFTEEN_TILE_MASKS.indexOf(mask as (typeof FIFTEEN_TILE_MASKS)[number]));
   }
 
-  assert.equal(firstMatchingRule(wang.rules, actualFromCornerMask(15)), wangIndexForMask(15, true));
-  assert.notEqual(firstMatchingRule(wang.rules, actualFromCornerMask(15)), wangIndexForMask(1, true));
+  assert.equal(firstMatchingRule(wang.rules, actualFromCornerMask(15)), 15);
+  assert.notEqual(firstMatchingRule(wang.rules, actualFromCornerMask(15)), 11);
+  const southEdge = {
+    Top: 1, Bottom: 2, Left: 1, Right: 1, TopLeft: 2, TopRight: 2, BottomLeft: 2, BottomRight: 2,
+  } satisfies Neighbors;
+  assert.equal(wangMatchingIndex(southEdge, true), wangEdgeIndex(1 | 2 | 8));
 });
 
 test("Godot 47-blob rules cover every neighborhood exactly once", () => {
@@ -308,7 +314,7 @@ test("sheet size must match the preset grid", () => {
   assert.match(extra.warning ?? "", /위쪽 8줄/);
   assert.equal(extra.data?.cells.length, 45);
   assert.equal(extra.data?.cells[40]?.role, "unmapped");
-  assert.equal(extra.data?.rules.length, 15);
+  assert.equal(extra.data?.rules.length, 30);
 });
 
 test("unity slice rects use a bottom-left origin", () => {
