@@ -144,8 +144,8 @@ export function MotionStabilizer({ active = true }: Props) {
       ) : null}
 
       <DropZone
-        title="프레임 이미지를 순서대로 떨어뜨리거나 클릭"
-        hint="PNG, JPG, WebP. Walk_01처럼 놓은 순서가 재생 순서입니다. 알파 30 이하 고스트는 발 위치에서 빠집니다."
+        title="프레임 PNG, JPG, WebP를 순서대로 떨어뜨리거나 클릭"
+        hint="Walk_01처럼 놓은 순서가 재생 순서입니다. 알파 30 이하 고스트는 발 위치에서 빠집니다."
         onFiles={motion.addFiles}
       />
 
@@ -498,7 +498,7 @@ function FrameThumb({
           frame.status === "error" ? "border-[#f07178]" : frame.status === "empty" ? "border-[#6a5438]" : "border-transparent"
         }`}
       >
-        <button type="button" onClick={onShow} className="block h-full w-full" aria-label={`${frame.name} 프레임 보기`}>
+        <button type="button" onClick={onShow} className="block h-full w-full" aria-label={`${frame.fileName} 프레임 보기`}>
           {frame.previewUrl ? (
             // Local blob preview. next/image cannot take an object URL.
             // eslint-disable-next-line @next/next/no-img-element
@@ -519,7 +519,7 @@ function FrameThumb({
         <button
           type="button"
           onClick={onRemove}
-          aria-label={`${frame.name} 제거`}
+          aria-label={`${frame.fileName} 제거`}
           className="absolute top-1 right-1 flex size-5 items-center justify-center rounded bg-[#0d1016]/85 text-[#ece7df] hover:bg-[#f07178] hover:text-[#1a0c0e]"
         >
           <X className="size-3" aria-hidden />
@@ -529,7 +529,7 @@ function FrameThumb({
         <button
           type="button"
           draggable
-          aria-label={`${frame.name} 순서 바꾸기`}
+          aria-label={`${frame.fileName} 순서 바꾸기`}
           onDragStart={(event) => {
             event.dataTransfer.effectAllowed = "move";
             event.dataTransfer.setData("text/plain", frame.id);
@@ -544,7 +544,7 @@ function FrameThumb({
           type="button"
           onClick={() => onMove(-1)}
           disabled={!canEarlier}
-          aria-label={`${frame.name} 앞으로`}
+          aria-label={`${frame.fileName} 앞으로`}
           className="inline-flex size-6 items-center justify-center rounded text-[#9aa3b5] hover:bg-[#222836] hover:text-[#ece7df] disabled:opacity-30"
         >
           <SkipBack className="size-3" aria-hidden />
@@ -553,14 +553,14 @@ function FrameThumb({
           type="button"
           onClick={() => onMove(1)}
           disabled={!canLater}
-          aria-label={`${frame.name} 뒤로`}
+          aria-label={`${frame.fileName} 뒤로`}
           className="inline-flex size-6 items-center justify-center rounded text-[#9aa3b5] hover:bg-[#222836] hover:text-[#ece7df] disabled:opacity-30"
         >
           <SkipForward className="size-3" aria-hidden />
         </button>
       </div>
       <p className="truncate text-[11px] text-[#ece7df]" title={frame.fileName}>
-        {frame.name}
+        {frame.fileName}
       </p>
       {frame.message ? <p className="truncate text-[10px] text-[#d7b15a]">{frame.message}</p> : null}
     </li>

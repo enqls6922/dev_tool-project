@@ -134,8 +134,8 @@ export function RuleTileForge() {
 
           <DropZone
             multiple={false}
-            title="타일셋 이미지를 떨어뜨리거나 클릭"
-            hint="PNG, JPG, WebP 한 장. SVG는 받지 않습니다. 칸 나누기와 RuleData.json은 이 브라우저에서 만듭니다."
+            title="타일셋 PNG, JPG, WebP를 떨어뜨리거나 클릭"
+            hint="시트 한 장만 올립니다. SVG는 받지 않습니다. 칸 나누기와 RuleData.json은 이 브라우저에서 만듭니다."
             onFiles={(files) => {
               setActiveIndex(null);
               void forge.addFiles(files);

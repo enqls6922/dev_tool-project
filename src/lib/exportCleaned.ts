@@ -1,8 +1,9 @@
 import { saveAs } from "file-saver";
 import JSZip from "jszip";
+import { toPngDownloadName } from "./fileNames.ts";
 
 export function downloadCleanedPng(blob: Blob, name: string): void {
-  saveAs(blob, name);
+  saveAs(blob, toPngDownloadName(name));
 }
 
 export async function downloadCleanedZip(files: { name: string; blob: Blob }[]): Promise<void> {
@@ -11,7 +12,7 @@ export async function downloadCleanedZip(files: { name: string; blob: Blob }[]):
   }
   const zip = new JSZip();
   for (const file of files) {
-    zip.file(file.name, file.blob);
+    zip.file(toPngDownloadName(file.name), file.blob);
   }
   const blob = await zip.generateAsync({
     type: "blob",

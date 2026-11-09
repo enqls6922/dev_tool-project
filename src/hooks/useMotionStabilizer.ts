@@ -1,18 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { sanitizeDownloadName } from "@/lib/fileNames";
+import { sanitizeFilename } from "@/lib/fileNames";
 import { canvasToPngBlob } from "@/lib/exportPack";
 import { downloadMotionJson, downloadMotionPng } from "@/lib/exportMotion";
 import {
   drawImageToCanvas,
   loadImage,
-  MAX_IMAGE_EDGE,
   toSpriteName,
   uniqueSpriteNames,
   type OpaqueBounds,
 } from "@/lib/imageProcessor";
-import { formatRasterRejection, partitionRasterFiles } from "@/lib/uploadPolicy";
+import { acceptRasterUploads, PIXEL_ART_LIMIT_MESSAGE } from "@/lib/uploadSecurity";
 import {
   buildMotionDocument,
   compareFileNames,
@@ -51,9 +50,6 @@ async function decodeFrame(file: File): Promise<MotionFrame> {
   const name = toSpriteName(file.name);
   try {
     const image = await loadImage(file);
-    if (image.naturalWidth > MAX_IMAGE_EDGE || image.naturalHeight > MAX_IMAGE_EDGE) {
-      throw new Error(`한 변이 ${MAX_IMAGE_EDGE}px를 넘습니다.`);
-    }
     if (image.naturalWidth < 1 || image.naturalHeight < 1) {
       throw new Error("이미지 크기가 없습니다.");
     }
@@ -65,7 +61,7 @@ async function decodeFrame(file: File): Promise<MotionFrame> {
     return {
       id,
       name,
-      fileName: sanitizeDownloadName(file.name),
+      fileName: sanitizeFilename(file.name, "frame"),
       status: bounds ? "ready" : "empty",
       message: bounds ? undefined : "알파 30을 넘는 픽셀이 없습니다.",
       sourceWidth: sourceCanvas.width,
@@ -78,7 +74,7 @@ async function decodeFrame(file: File): Promise<MotionFrame> {
     return {
       id,
       name,
-      fileName: sanitizeDownloadName(file.name),
+      fileName: sanitizeFilename(file.name, "frame"),
       status: "error",
       message: caught instanceof Error ? caught.message : "이 파일을 읽지 못했습니다.",
       sourceWidth: 0,
@@ -155,13 +151,10 @@ export function useMotionStabilizer(active: boolean) {
   }, [active, playing, fps, playable.length]);
 
   async function ingest(files: File[], generation: number) {
-    const { accepted, rejected } = partitionRasterFiles(files);
+    const { accepted, message } = acceptRasterUploads(files);
     if (!mountedRef.current || generation !== generationRef.current) return;
-    if (rejected.length > 0) {
-      setNotice(formatRasterRejection(rejected));
-    } else if (accepted.length > 0) {
-      setNotice(null);
-    }
+    if (message) setNotice(message);
+    else if (accepted.length > 0) setNotice(null);
     if (accepted.length === 0) return;
 
     setBusy(true);
@@ -171,6 +164,7 @@ export function useMotionStabilizer(active: boolean) {
       if (!file) continue;
       setProgress(`읽는 중 ${index + 1} / ${accepted.length}`);
       const frame = await decodeFrame(file);
+      if (frame.message === PIXEL_ART_LIMIT_MESSAGE) setNotice(PIXEL_ART_LIMIT_MESSAGE);
       if (!mountedRef.current || generation !== generationRef.current) {
         release(frame);
         return;

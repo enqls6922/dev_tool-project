@@ -9,7 +9,7 @@ import {
   toSpriteName,
   uniqueSpriteNames,
 } from "@/lib/imageProcessor";
-import { formatRasterRejection, partitionRasterFiles } from "@/lib/uploadPolicy";
+import { acceptRasterUploads, PIXEL_ART_LIMIT_MESSAGE } from "@/lib/uploadSecurity";
 import {
   DEFAULT_SETTINGS,
   type AtlasDocument,
@@ -103,6 +103,7 @@ export function useSpriteForge() {
     });
 
     const names = uniqueSpriteNames(list.map((item) => toSpriteName(item.file.name)));
+    let pixelLimited = false;
     const nextRecords: SpriteRecord[] = list.map((item, index) => ({
       ...item,
       spriteName: names[index] ?? "sprite",
@@ -137,10 +138,12 @@ export function useSpriteForge() {
         }
       } catch (caught) {
         if (!alive()) return;
+        const message = caught instanceof Error ? caught.message : "이 파일을 읽지 못했습니다.";
+        if (message === PIXEL_ART_LIMIT_MESSAGE) pixelLimited = true;
         nextRecords[index] = {
           ...nextRecords[index],
           status: "error",
-          message: caught instanceof Error ? caught.message : "이 파일을 읽지 못했습니다.",
+          message,
         };
       }
       if (!alive()) return;
@@ -150,13 +153,15 @@ export function useSpriteForge() {
 
     if (!alive()) return;
 
+    if (pixelLimited) setNotice(PIXEL_ART_LIMIT_MESSAGE);
+
     if (packable.length === 0) {
       if (packRef.current) URL.revokeObjectURL(packRef.current.previewUrl);
       commit(() => {
         setPack(null);
         setPhase("ready");
         setProgress("");
-        setError("불투명한 픽셀이 있는 이미지가 없습니다.");
+        setError(pixelLimited ? PIXEL_ART_LIMIT_MESSAGE : "불투명한 픽셀이 있는 이미지가 없습니다.");
       });
       return;
     }
@@ -199,19 +204,16 @@ export function useSpriteForge() {
 
   function addFiles(files: File[]) {
     clearDebounce();
-    const { accepted: filesAccepted, rejected } = partitionRasterFiles(files);
-    const accepted: SpriteRecord[] = filesAccepted.map((file) => ({
+    const { accepted: rasterFiles, message } = acceptRasterUploads(files);
+    if (message) setNotice(message);
+    else setNotice(null);
+
+    const accepted: SpriteRecord[] = rasterFiles.map((file) => ({
       id: crypto.randomUUID(),
       file,
-      status: "queued" as const,
+      status: "queued",
       spriteName: toSpriteName(file.name),
     }));
-
-    if (rejected.length > 0) {
-      setNotice(formatRasterRejection(rejected));
-    } else {
-      setNotice(null);
-    }
 
     if (accepted.length === 0) return;
     const next = [...sourcesRef.current, ...accepted];

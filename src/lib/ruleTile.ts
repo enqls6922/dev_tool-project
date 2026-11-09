@@ -1,3 +1,5 @@
+import { staticScript } from "./scriptSafety.ts";
+
 export const RULE_TILE_SIZES = [16, 32, 48, 64] as const;
 
 export type RuleTileSize = (typeof RULE_TILE_SIZES)[number];
@@ -495,7 +497,7 @@ export function analyzeSheet(input: {
 }
 
 export function buildRuleTileScript(): string {
-  return `// SpriteForge — drop this file in an Editor folder (the zip already does).
+  return staticScript`// SpriteForge — drop this file in an Editor folder (the zip already does).
 // Select Tileset.png, then run Tools/SpriteForge/Build Rule Tile
 // or right-click the texture and choose SpriteForge/Build Rule Tile.
 // Requires Unity 2021.2+ and the 2D Tilemap Extras package (com.unity.2d.tilemap.extras).

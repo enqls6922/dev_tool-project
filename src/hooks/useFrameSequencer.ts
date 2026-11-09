@@ -9,7 +9,7 @@ import {
   type SequenceFps,
 } from "@/lib/frameSequencer";
 import { drawImageToCanvas, loadImage, MAX_IMAGE_EDGE, toSpriteName } from "@/lib/imageProcessor";
-import { formatRasterRejection, partitionRasterFiles } from "@/lib/uploadPolicy";
+import { acceptRasterUploads } from "@/lib/uploadSecurity";
 
 const MAX_FRAMES = 64;
 
@@ -82,9 +82,9 @@ export function useFrameSequencer() {
   });
 
   async function addFiles(files: File[]) {
-    const { accepted, rejected } = partitionRasterFiles(files);
+    const { accepted, message } = acceptRasterUploads(files);
     const notes: string[] = [];
-    if (rejected.length > 0) notes.push(formatRasterRejection(rejected));
+    if (message) notes.push(message);
 
     const room = MAX_FRAMES - framesRef.current.length;
     const batch = accepted.slice(0, Math.max(0, room));

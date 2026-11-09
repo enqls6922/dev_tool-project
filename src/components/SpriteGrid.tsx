@@ -52,7 +52,7 @@ export function SpriteGrid({ sprites, pixelated, onRemove, onClear }: Props) {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={sprite.previewUrl}
-                  alt={sprite.spriteName}
+                  alt={sprite.file.name}
                   className="h-full w-full object-contain"
                   style={{ imageRendering: pixelated ? "pixelated" : "auto" }}
                 />
@@ -64,14 +64,14 @@ export function SpriteGrid({ sprites, pixelated, onRemove, onClear }: Props) {
               <button
                 type="button"
                 onClick={() => onRemove(sprite.id)}
-                aria-label={`${sprite.spriteName} 제거`}
+                aria-label={`${sprite.file.name} 제거`}
                 className="absolute top-1 right-1 flex size-6 items-center justify-center rounded-md bg-[#0d1016]/85 text-[#ece7df] transition hover:bg-[#f07178] hover:text-[#1a0c0e]"
               >
                 <X className="size-3.5" aria-hidden />
               </button>
             </div>
             <p className="mt-1.5 truncate text-xs text-[#ece7df]" title={sprite.file.name}>
-              {sprite.spriteName}
+              {sprite.file.name}
             </p>
             <p className="truncate text-[10px] text-[#6f788a]">
               {sprite.message
