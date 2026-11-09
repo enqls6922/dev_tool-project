@@ -137,7 +137,7 @@ export function TileSandbox({ previewUrl, tileSize, canSample, layout }: Props) 
         <div>
           <h2 className="text-sm font-semibold text-[#ece7df]">실시간 붓칠 샌드박스</h2>
           <p className="mt-1 text-xs leading-5 text-[#9aa3b5]">
-            8×8 칸, 각 32px. 좌클릭은 채우고 우클릭은 지웁니다. Wang 5×8의 내부 바닥은 tile_30입니다. Godot은 12×4 47-Blob입니다.
+            8×8 칸, 각 32px. 좌클릭은 채우고 우클릭은 지웁니다. Wang 5×8은 8방향을 검사해 내부는 tile_16, 외곽은 지정된 테두리 타일만 그립니다.
           </p>
         </div>
         <div className="flex flex-wrap gap-1.5" role="toolbar" aria-label="샌드박스 도구">
@@ -222,7 +222,7 @@ export function TileSandbox({ previewUrl, tileSize, canSample, layout }: Props) 
           : canSample
             ? layout.kind === "wang"
               ? layout.tall
-                ? "Wang 5×8 표면 칸을 그립니다. 내부 바닥과 기본 스프라이트는 tile_30이고 tile_15는 기둥 벽입니다."
+                ? "Wang 5×8은 이웃 8칸을 검사합니다. 사방이 막힌 바닥은 tile_16, 외곽은 tile_00·01·02·15·18·25·26·28, 고립은 tile_06입니다."
                 : "Wang 5×4는 인덱스 = 코너 마스크입니다. 내부 바닥은 tile_15입니다."
               : layout.kind === "godot"
                 ? "PixelLab Godot (47-Blob) 12×4 칸을 8방향 이웃과 같은 픽셀 좌표로 그립니다."

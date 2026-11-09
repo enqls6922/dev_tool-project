@@ -67,7 +67,7 @@ export const PRESET_INFO: Record<RulePreset, PresetInfo> = {
     label: "PixelLab Wang (5×8, 40타일)",
     columns: 5,
     rows: 8,
-    hint: "5×4는 인덱스 = NW + 2·NE + 4·SW + 8·SE 이고 tile_15가 내부 바닥입니다. 5×8(160×256)은 같은 마스크가 세로 2칸입니다. 짝수 행이 표면, 홀수 행이 벽입니다. 내부 바닥은 tile_30(좌측 하단 평평한 표면)이고 tile_15는 서쪽 기둥 벽, tile_00은 기둥 상단입니다. 기본 스프라이트도 tile_30입니다.",
+    hint: "5×8(160×256, 32px, 40칸)은 고정 인덱스입니다. 내부 바닥과 기본 스프라이트는 tile_16, 북쪽 tile_01, 남쪽 tile_26, 서쪽 tile_15, 동쪽 tile_18, 외곽 코너 tile_00·02·25·28, 안쪽 코너 tile_11·12·21·22, 고립 tile_06입니다. 31–34와 36–39는 검은 빈칸이라 룰에 쓰지 않습니다. 5×4는 인덱스 = NW + 2·NE + 4·SW + 8·SE 입니다.",
   },
 };
 
@@ -144,24 +144,61 @@ export function pixelLabSourceRect(mask: number, tileSize: number, shape: Fiftee
 }
 
 /**
- * PixelLab Wang sheet, 5 columns. Bits: NW=1, NE=2, SW=4, SE=8.
+ * PixelLab Wang sheet, 5 columns.
  *
- * A 5×4 sheet stores the 16 masks in index order. Tile 15 is the full floor
- * and tile 0 is the isolated default. Indices 16–19 are padding.
+ * A 5×4 sheet stores the 16 corner masks in index order.
+ * Bits: NW=1, NE=2, SW=4, SE=8. Tile 15 is the full floor and tile 0 is the
+ * isolated default. Indices 16–19 are padding.
  *
- * A 5×8 sheet (160×256 at 32px) stacks each mask as two square cells.
- * The even row is the surface and the odd row is the wall under it.
- * Surface index = floor(mask / 5) * 10 + (mask % 5).
- * Mask 15, the full center, is tile_30: column 0, row 6, the flat floor.
- * tile_15 is the lower half of mask 5 (the west wall), a pillar wall.
- * tile_25 is the lower half of mask 10 (the east wall), not the floor.
- * tile_00 is the pillar cap. The default sprite is tile_30.
+ * A 5×8 sheet (160×256 at 32px, 40 cells) does not use that formula.
+ * `WANG_5X8_INDEX` is the fixed cell for each role. Indices 31–34 and 36–39
+ * are black empty cells and are never rules. tile_00, tile_01, and tile_02
+ * are the north pillar caps and are only legal when the north neighbour is empty.
  */
 export const WANG_COLUMNS = 5;
 export const WANG_LOGICAL_ROWS = 4;
 export const WANG_FULL_ROWS = 8;
-/** Surface cell of the full-center mask on a 5×8 sheet. */
-export const WANG_TALL_FLOOR_INDEX = 30;
+/** Full-center stone floor on a 5×8 sheet. Also the default sprite. */
+export const WANG_TALL_FLOOR_INDEX = 16;
+
+/**
+ * Fixed 5×8 roles. The floor binding is tile_16.
+ * tile_17 is an unused floor variant. tile_21 is the south-west inner corner,
+ * not a second full-center rule.
+ */
+export const WANG_5X8_INDEX = {
+  floor: 16,
+  defaultSprite: 16,
+  north: 1,
+  south: 26,
+  west: 15,
+  east: 18,
+  outerNW: 0,
+  outerNE: 2,
+  outerSW: 25,
+  outerSE: 28,
+  innerNW: 11,
+  innerNE: 12,
+  innerSW: 21,
+  innerSE: 22,
+  single: 6,
+} as const;
+
+/** North pillar caps. Forbidden in the middle of a surrounded floor. */
+export const WANG_5X8_PILLAR_TOPS = [0, 1, 2] as const;
+
+/** The only sprites a 5×8 outer border may use. */
+export const WANG_5X8_BORDER = [0, 1, 2, 15, 18, 25, 26, 28] as const;
+
+/** Black empty cells on the 5×8 sheet. Never a rule sprite. */
+export const WANG_5X8_BLACK = [31, 32, 33, 34, 36, 37, 38, 39] as const;
+
+const WANG_5X8_BLACK_SET = new Set<number>(WANG_5X8_BLACK);
+const WANG_5X8_PILLAR_SET = new Set<number>(WANG_5X8_PILLAR_TOPS);
+
+export function isWang5x8Black(index: number): boolean {
+  return WANG_5X8_BLACK_SET.has(index);
+}
 
 export function wangEdgeBand(rows: number): boolean {
   return rows >= WANG_FULL_ROWS;
@@ -177,39 +214,39 @@ function assertWangMask(mask: number): void {
   }
 }
 
-/** Surface cell for this corner mask. On a 5×8 sheet that cell is the even row. */
+/**
+ * Sheet index of a 5×4 corner mask. The index is the mask.
+ * A 5×8 sheet does not use this formula.
+ */
 export function wangSurfaceIndex(mask: number, tall: boolean): number {
   assertWangMask(mask);
-  if (!tall) return mask;
-  const column = mask % WANG_COLUMNS;
-  const logicalRow = Math.floor(mask / WANG_COLUMNS);
-  return logicalRow * 2 * WANG_COLUMNS + column;
+  if (tall) {
+    throw new Error("5×8 Wang 시트는 코너 마스크가 아니라 고정 인덱스 테이블을 사용합니다.");
+  }
+  return mask;
 }
 
-/** Sheet index whose surface stores this mask. */
+/** Sheet index whose 5×4 cell stores this mask. */
 export function wangIndexForMask(mask: number, tall = false): number {
   return wangSurfaceIndex(mask, tall);
 }
 
 /**
- * Corner mask at a row-major index. -1 is padding.
- * On a tall sheet the wall row repeats the surface mask above it.
+ * Corner mask at a row-major index on a 5×4 sheet. -1 is padding.
+ * A 5×8 sheet has no mask-per-cell formula, so every tall index is -1.
  */
 export function wangCellMask(index: number, tall = false): number {
-  if (!Number.isInteger(index) || index < 0) return -1;
+  if (tall || !Number.isInteger(index) || index < 0) return -1;
   const column = index % WANG_COLUMNS;
   const row = Math.floor(index / WANG_COLUMNS);
-  const limit = tall ? WANG_FULL_ROWS : WANG_LOGICAL_ROWS;
-  if (row >= limit) return -1;
-  const logicalRow = tall ? Math.floor(row / 2) : row;
-  const local = logicalRow * WANG_COLUMNS + column;
+  if (row >= WANG_LOGICAL_ROWS) return -1;
+  const local = row * WANG_COLUMNS + column;
   return local <= 15 ? local : -1;
 }
 
-/** Lower half of a tall Wang tile. Those cells are walls, not extra rules. */
+/** 5×8 cells are independent sprites. There is no paired wall half. */
 export function wangIsWallHalf(index: number, tall: boolean): boolean {
-  if (!tall || wangCellMask(index, true) < 0) return false;
-  return Math.floor(index / WANG_COLUMNS) % 2 === 1;
+  return tall && index < 0;
 }
 
 export function wangSourceRect(mask: number, tileSize: number, tall = false) {
@@ -671,32 +708,82 @@ function slotsForPreset(preset: RulePreset, shape: FifteenShape): Slot[] {
   return fifteenSlots(shape);
 }
 
+function wangCardinals(north: 0 | 1, east: 0 | 1, south: 0 | 1, west: 0 | 1): Neighbors {
+  const bit = (filled: 0 | 1): NeighborValue => (filled === 1 ? 1 : 2);
+  return {
+    Top: bit(north),
+    Bottom: bit(south),
+    Left: bit(west),
+    Right: bit(east),
+    TopLeft: 0,
+    TopRight: 0,
+    BottomLeft: 0,
+    BottomRight: 0,
+  };
+}
+
+function wangInner(open: "TopLeft" | "TopRight" | "BottomLeft" | "BottomRight"): Neighbors {
+  const neighbors = neighborsFromCornerMask(15);
+  neighbors[open] = 2;
+  return neighbors;
+}
+
+function wangFixedSlot(
+  index: number,
+  name: string,
+  label: string,
+  mask: number,
+  neighbors: Neighbors,
+  fallback = false,
+): Slot {
+  return { index, mask, name, label, neighbors, rule: true, fallback };
+}
+
+/**
+ * 5×8 rules in the fixed table. Cardinals are fully specified.
+ * Diagonals matter only for the full center versus a single inner corner.
+ * Every other painted cell is an outer-border sprite from WANG_5X8_BORDER,
+ * or tile_06 when no cardinal neighbour exists.
+ */
+function wangFixedSlots(): Slot[] {
+  const floor = neighborsFromCornerMask(15);
+  return [
+    wangFixedSlot(WANG_5X8_INDEX.floor, "floor", "내부 바닥", 15, floor, true),
+    wangFixedSlot(WANG_5X8_INDEX.innerNW, "inner_nw", "북서 안쪽 코너", 15, wangInner("TopLeft")),
+    wangFixedSlot(WANG_5X8_INDEX.innerNE, "inner_ne", "북동 안쪽 코너", 15, wangInner("TopRight")),
+    wangFixedSlot(WANG_5X8_INDEX.innerSW, "inner_sw", "남서 안쪽 코너", 15, wangInner("BottomLeft")),
+    wangFixedSlot(WANG_5X8_INDEX.innerSE, "inner_se", "남동 안쪽 코너", 15, wangInner("BottomRight")),
+    wangFixedSlot(WANG_5X8_INDEX.outerNW, "outer_nw", "북서 외곽 코너", 6, wangCardinals(0, 1, 1, 0)),
+    wangFixedSlot(WANG_5X8_INDEX.outerNE, "outer_ne", "북동 외곽 코너", 12, wangCardinals(0, 0, 1, 1)),
+    wangFixedSlot(WANG_5X8_INDEX.outerSW, "outer_sw", "남서 외곽 코너", 3, wangCardinals(1, 1, 0, 0)),
+    wangFixedSlot(WANG_5X8_INDEX.outerSE, "outer_se", "남동 외곽 코너", 9, wangCardinals(1, 0, 0, 1)),
+    wangFixedSlot(WANG_5X8_INDEX.north, "north", "북쪽 상단 벽면", 14, wangCardinals(0, 1, 1, 1)),
+    wangFixedSlot(WANG_5X8_INDEX.south, "south", "남쪽 하단 바닥경계", 11, wangCardinals(1, 1, 0, 1)),
+    wangFixedSlot(WANG_5X8_INDEX.west, "west", "서쪽 좌측 세로벽", 7, wangCardinals(1, 1, 1, 0)),
+    wangFixedSlot(WANG_5X8_INDEX.east, "east", "동쪽 우측 세로벽", 13, wangCardinals(1, 0, 1, 1)),
+    wangFixedSlot(WANG_5X8_INDEX.single, "single", "고립 단독", 0, wangCardinals(0, 0, 0, 0)),
+    wangFixedSlot(WANG_5X8_INDEX.north, "corridor_ew", "북쪽 상단 벽면", 10, wangCardinals(0, 1, 0, 1)),
+    wangFixedSlot(WANG_5X8_INDEX.west, "corridor_ns", "서쪽 좌측 세로벽", 5, wangCardinals(1, 0, 1, 0)),
+    wangFixedSlot(WANG_5X8_INDEX.south, "tip_n", "남쪽 하단 바닥경계", 1, wangCardinals(1, 0, 0, 0)),
+    wangFixedSlot(WANG_5X8_INDEX.west, "tip_e", "서쪽 좌측 세로벽", 2, wangCardinals(0, 1, 0, 0)),
+    wangFixedSlot(WANG_5X8_INDEX.north, "tip_s", "북쪽 상단 벽면", 4, wangCardinals(0, 0, 1, 0)),
+    wangFixedSlot(WANG_5X8_INDEX.east, "tip_w", "동쪽 우측 세로벽", 8, wangCardinals(0, 0, 0, 1)),
+  ];
+}
+
 function wangSlots(tall: boolean): Slot[] {
+  if (tall) return wangFixedSlots();
   const slots: Slot[] = [];
   for (let mask = 0; mask <= 15; mask += 1) {
-    const index = wangSurfaceIndex(mask, tall);
-    const floor = mask === 15;
+    const index = wangSurfaceIndex(mask, false);
     slots.push({
       index,
       mask,
       name: cornerName(mask),
-      label: tall && mask === 0 ? "기둥 상단" : wangCornerLabel(mask),
+      label: wangCornerLabel(mask),
       neighbors: mask === 0 ? emptyNeighbors() : actualFromCornerMask(mask),
       rule: mask !== 0,
-      fallback: tall ? floor : mask === 0,
-    });
-  }
-  if (!tall) return slots;
-  for (let mask = 0; mask <= 15; mask += 1) {
-    const index = wangSurfaceIndex(mask, true) + WANG_COLUMNS;
-    slots.push({
-      index,
-      mask,
-      name: cornerName(mask),
-      label: mask === 5 ? "기둥 벽" : `${wangCornerLabel(mask)} 아래`,
-      neighbors: emptyNeighbors(),
-      rule: false,
-      fallback: false,
+      fallback: mask === 0,
     });
   }
   return slots;
@@ -725,14 +812,24 @@ export function wangMatchingIndex(actual: Neighbors, tall: boolean): number | nu
   return firstMatchingRule(orderedRules(wangSlots(tall)), actual);
 }
 
-/** Rule sprite for this neighbourhood. A 5×8 miss uses the flat floor, not the pillar cap. */
+/**
+ * Rule sprite for this neighbourhood.
+ * A 5×8 miss is the stone floor. Pillar caps and black cells are rejected.
+ */
 export function wangResolve(actual: Neighbors, tall: boolean): { index: number; mask: number } {
   const rules = orderedRules(wangSlots(tall));
   for (const rule of rules) {
-    if (ruleMatches(rule.neighbors, actual)) return { index: rule.index, mask: rule.mask };
+    if (!ruleMatches(rule.neighbors, actual)) continue;
+    return tall ? guardWang5x8Sprite(rule.index, rule.mask, actual) : { index: rule.index, mask: rule.mask };
   }
   if (tall) return { index: WANG_TALL_FLOOR_INDEX, mask: 15 };
   return { index: 0, mask: 0 };
+}
+
+function guardWang5x8Sprite(index: number, mask: number, actual: Neighbors): { index: number; mask: number } {
+  const pillarInFloor = WANG_5X8_PILLAR_SET.has(index) && actual.Top === 1;
+  if (pillarInFloor || isWang5x8Black(index)) return { index: WANG_TALL_FLOOR_INDEX, mask: 15 };
+  return { index, mask };
 }
 
 function cloneNeighbors(neighbors: Neighbors): Neighbors {
@@ -832,7 +929,10 @@ export function analyzeSheet(input: {
   const base = { columns, rows, cells, data: null, warning: null };
   const tallWang = input.preset === "wang" && wangEdgeBand(mappedRows);
   const slots = input.preset === "wang" ? wangSlots(tallWang) : slotsForPreset(input.preset, shape);
-  const slotByIndex = new Map(slots.map((slot) => [slot.index, slot]));
+  const slotByIndex = new Map<number, Slot>();
+  for (const slot of slots) {
+    if (!slotByIndex.has(slot.index)) slotByIndex.set(slot.index, slot);
+  }
   const fallback = slots.find((slot) => slot.fallback);
   if (!fallback) {
     return { ...base, error: "프리셋에 기본 스프라이트가 없습니다." };
@@ -841,11 +941,13 @@ export function analyzeSheet(input: {
   const mappedCells: RuleCell[] = cells.map((cell) => {
     const slot = slotByIndex.get(cell.index);
     if (!slot || cell.row >= mappedRows) {
+      const inside = cell.row < mappedRows;
+      const black = tallWang && inside && isWang5x8Black(cell.index);
       return {
         ...cell,
         sprite: tileSpriteName(cell.index),
-        name: "unmapped",
-        label: "범위 밖",
+        name: black ? "black" : "unmapped",
+        label: black ? "검은 빈칸" : tallWang && inside ? "미사용" : "범위 밖",
         mask: -1,
         role: "unmapped",
         fallback: false,
@@ -908,11 +1010,21 @@ export function buildRuleTileScript(): string {
 // PixelLab 15-tileset is 3 columns by 5 rows (indices 0-14). A native 4x4 or 4x8
 // sheet is accepted too and keeps the 16-role order.
 // Wang sheets are 5 columns of square cells. On a 5x4 sheet the index is the mask
-// (NW + 2*NE + 4*SW + 8*SE), so tile 15 is the floor. On a 5x8 sheet each mask is
-// two cells tall: the even row is the surface and the odd row is the wall.
-// The full center is tile_30. tile_15 is the west pillar wall and tile_00 is the
-// pillar cap, so m_DefaultSprite is tile_30. doubleHeight stays false; each rule
-// samples one 32px surface cell.
+// (NW + 2*NE + 4*SW + 8*SE), so tile 15 is the floor and tile 0 is the default.
+// A 5x8 sheet (160x256, 40 cells) uses the fixed index table below. The builder
+// rebinds those rule names onto these sprites and refuses the black cells.
+//   floor / default sprite          tile_16
+//   north edge                      tile_01
+//   south edge                      tile_26
+//   west edge                       tile_15
+//   east edge                       tile_18
+//   outer NW / NE / SW / SE         tile_00, tile_02, tile_25, tile_28
+//   inner NW / NE / SW / SE         tile_11, tile_12, tile_21, tile_22
+//   single                          tile_06
+//   black, never a rule             tile_31 tile_32 tile_33 tile_34 tile_36 tile_37 tile_38 tile_39
+// tile_00, tile_01, and tile_02 are north pillar caps. Their rules require an
+// empty north neighbour, so they cannot land in the middle of the floor.
+// doubleHeight stays false; each rule samples one square cell.
 // Godot 47-blob is the fixed 12x4 3x3-minimal template (47 rules). A cell's pixels
 // are column * tileSize, row * tileSize. A PixelLab Godot download that is 24x8
 // base cells is sliced as that template at twice the tile size.
@@ -1028,7 +1140,7 @@ public static class RuleTileBuilder
             EditorGUIUtility.PingObject(ruleTile);
             EditorUtility.DisplayDialog(
                 "SpriteForge",
-                "Rule Tile을 만들었습니다.\\n" + assetPath + "\\n룰 " + ruleTile.m_TilingRules.Count + "개, 기본 스프라이트 tile_" + data.defaultSpriteIndex.ToString("00"),
+                "Rule Tile을 만들었습니다.\\n" + assetPath + "\\n룰 " + ruleTile.m_TilingRules.Count + "개, 기본 스프라이트 tile_" + DefaultSpriteIndex(data).ToString("00"),
                 "확인");
         }
         catch (Exception exception)
@@ -1126,10 +1238,55 @@ public static class RuleTileBuilder
         return lookup;
     }
 
+    private static bool IsWang5x8(SpriteForgeRuleData data)
+    {
+        return data != null && data.preset == "wang" && data.columns == 5 && data.rows >= 8;
+    }
+
+    private static int DefaultSpriteIndex(SpriteForgeRuleData data)
+    {
+        if (IsWang5x8(data)) return 16;
+        return data.defaultSpriteIndex;
+    }
+
+    private static bool IsWang5x8Black(int index)
+    {
+        return index == 31 || index == 32 || index == 33 || index == 34
+            || index == 36 || index == 37 || index == 38 || index == 39;
+    }
+
+    private static int BindWang5x8Index(string name)
+    {
+        switch (name)
+        {
+            case "floor": return 16;
+            case "north": return 1;
+            case "corridor_ew": return 1;
+            case "tip_s": return 1;
+            case "south": return 26;
+            case "tip_n": return 26;
+            case "west": return 15;
+            case "corridor_ns": return 15;
+            case "tip_e": return 15;
+            case "east": return 18;
+            case "tip_w": return 18;
+            case "outer_nw": return 0;
+            case "outer_ne": return 2;
+            case "outer_sw": return 25;
+            case "outer_se": return 28;
+            case "inner_nw": return 11;
+            case "inner_ne": return 12;
+            case "inner_sw": return 21;
+            case "inner_se": return 22;
+            case "single": return 6;
+            default: return -1;
+        }
+    }
+
     private static RuleTile CreateRuleTile(SpriteForgeRuleData data, Dictionary<string, Sprite> sprites)
     {
         var ruleTile = ScriptableObject.CreateInstance<RuleTile>();
-        ruleTile.m_DefaultSprite = RequireSprite(sprites, data.defaultSpriteIndex);
+        ruleTile.m_DefaultSprite = RequireSprite(sprites, DefaultSpriteIndex(data));
         ruleTile.m_DefaultColliderType = Tile.ColliderType.Sprite;
 
         var id = 0;
@@ -1140,12 +1297,20 @@ public static class RuleTileBuilder
                 throw new InvalidOperationException("RuleData.json 룰에 neighbors 가 없습니다.");
             }
 
+            var index = entry.index;
+            if (IsWang5x8(data))
+            {
+                var forced = BindWang5x8Index(entry.name);
+                if (forced >= 0) index = forced;
+                if (IsWang5x8Black(index)) continue;
+            }
+
             var rule = new RuleTile.TilingRule();
             rule.m_Id = id++;
             rule.m_Output = RuleTile.TilingRuleOutput.OutputSprite.Single;
             rule.m_ColliderType = Tile.ColliderType.Sprite;
             rule.m_RuleTransform = RuleTile.TilingRuleOutput.Transform.Fixed;
-            rule.m_Sprites[0] = RequireSprite(sprites, entry.index);
+            rule.m_Sprites[0] = RequireSprite(sprites, index);
             rule.m_NeighborPositions = new List<Vector3Int>();
             rule.m_Neighbors = new List<int>();
             AddNeighbor(rule, new Vector3Int(-1, 1, 0), entry.neighbors.TopLeft);
