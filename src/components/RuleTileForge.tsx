@@ -198,7 +198,7 @@ export function RuleTileForge() {
 
 function layoutFor(data: RuleDataFile | null): SandboxLayout {
   if (!data) return FIFTEEN_LAYOUT;
-  if (data.preset === "wang") return { kind: "wang", doubled: data.doubleHeight };
+  if (data.preset === "wang") return { kind: "wang", edgeBand: data.rows >= 8 };
   if (data.preset === "godot-47") return { kind: "godot" };
   return { kind: "fifteen", shape: data.columns === 4 ? "4x4" : "3x5" };
 }

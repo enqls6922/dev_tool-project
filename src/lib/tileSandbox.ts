@@ -2,13 +2,15 @@ import {
   godotSourceRect,
   pixelLabSourceRect,
   pixelLabTileIndex,
-  wangSourceRect,
+  wangMatchingIndex,
+  wangRectForIndex,
   type FifteenShape,
+  type Neighbors,
 } from "./ruleTile.ts";
 
 export type SandboxLayout =
   | { kind: "fifteen"; shape: FifteenShape }
-  | { kind: "wang"; doubled: boolean }
+  | { kind: "wang"; edgeBand: boolean }
   | { kind: "godot" };
 
 export const FIFTEEN_LAYOUT: SandboxLayout = { kind: "fifteen", shape: "3x5" };
@@ -46,8 +48,8 @@ export function cardinalMaskAt(
 }
 
 /**
- * Cells whose 4-bit mask changes when `(x, y)` is painted or erased:
- * the edited cell and its cardinal neighbors.
+ * Cells whose tile can change when `(x, y)` is painted or erased.
+ * Wang corners and Godot blobs read all eight neighbours, so the ring is included.
  */
 export function cellsTouchedByEdit(
   x: number,
@@ -55,15 +57,50 @@ export function cellsTouchedByEdit(
   size = SANDBOX_SIZE,
 ): { x: number; y: number }[] {
   const coords = [{ x, y }];
-  if (y > 0) coords.push({ x, y: y - 1 });
-  if (x + 1 < size) coords.push({ x: x + 1, y });
-  if (y + 1 < size) coords.push({ x, y: y + 1 });
-  if (x > 0) coords.push({ x: x - 1, y });
+  const deltas = [
+    [0, -1],
+    [1, 0],
+    [0, 1],
+    [-1, 0],
+    [1, -1],
+    [1, 1],
+    [-1, 1],
+    [-1, -1],
+  ] as const;
+  for (const [dx, dy] of deltas) {
+    const nx = x + dx;
+    const ny = y + dy;
+    if (nx >= 0 && ny >= 0 && nx < size && ny < size) coords.push({ x: nx, y: ny });
+  }
   return coords;
 }
 
-function sheetIndexForMask(mask: number, layout: SandboxLayout): number {
-  if (layout.kind === "wang") return wangSourceRect(mask, 1, layout.doubled).index;
+/** This/NotThis for the eight cells around a painted cell. Outside the grid is NotThis. */
+export function cellNeighbors(
+  cells: readonly number[],
+  x: number,
+  y: number,
+  size = SANDBOX_SIZE,
+): Neighbors {
+  const at = (dx: number, dy: number): 1 | 2 => {
+    const nx = x + dx;
+    const ny = y + dy;
+    if (nx < 0 || ny < 0 || nx >= size || ny >= size) return 2;
+    return cells[ny * size + nx] === 1 ? 1 : 2;
+  };
+  return {
+    Top: at(0, -1),
+    Bottom: at(0, 1),
+    Left: at(-1, 0),
+    Right: at(1, 0),
+    TopLeft: at(-1, -1),
+    TopRight: at(1, -1),
+    BottomLeft: at(-1, 1),
+    BottomRight: at(1, 1),
+  };
+}
+
+function sheetIndexForMask(mask: number, layout: Exclude<SandboxLayout, { kind: "wang" }>): number {
   if (layout.kind === "godot") return godotSourceRect(mask, 1).index;
   return pixelLabTileIndex(mask, layout.shape);
 }
@@ -78,6 +115,9 @@ export function sandboxTileIndex(
 ): number | null {
   if (x < 0 || y < 0 || x >= size || y >= size) return null;
   if (cells[y * size + x] !== 1) return null;
+  if (layout.kind === "wang") {
+    return wangMatchingIndex(cellNeighbors(cells, x, y, size), layout.edgeBand) ?? 0;
+  }
   const mask = layout.kind === "godot"
     ? blobMaskAt(cells, x, y, size)
     : cardinalMaskAt(cells, x, y, size);
@@ -94,14 +134,16 @@ export function sandboxSourceRect(
 ) {
   const index = sandboxTileIndex(cells, x, y, size, layout);
   if (index === null) return null;
+  if (layout.kind === "wang") {
+    const mask = index >= 20 ? index - 20 : index;
+    return { ...wangRectForIndex(index, tileSize), mask };
+  }
   const mask = layout.kind === "godot"
     ? blobMaskAt(cells, x, y, size)
     : cardinalMaskAt(cells, x, y, size);
-  const source = layout.kind === "wang"
-    ? wangSourceRect(mask, tileSize, layout.doubled)
-    : layout.kind === "godot"
-      ? godotSourceRect(mask, tileSize)
-      : pixelLabSourceRect(mask, tileSize, layout.shape);
+  const source = layout.kind === "godot"
+    ? godotSourceRect(mask, tileSize)
+    : pixelLabSourceRect(mask, tileSize, layout.shape);
   return { ...source, mask };
 }
 

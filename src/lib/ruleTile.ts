@@ -67,7 +67,7 @@ export const PRESET_INFO: Record<RulePreset, PresetInfo> = {
     label: "PixelLab Wang (5×8, 40타일)",
     columns: 5,
     rows: 8,
-    hint: "PixelLab Wang은 가로 5열입니다. 32px 정사각은 160×128(5×4), 세로 2배 트랜지션은 160×256(5×8, 40칸)입니다. NW=1, NE=2, SW=4, SE=8.",
+    hint: "PixelLab Wang 5×8(40칸)은 15-tileset과 다른 2-corner 시트입니다. 인덱스 = NW + 2·NE + 4·SW + 8·SE. 0은 고립, 15는 내부 바닥, 5·10은 세로 벽, 7·11·13·14는 안쪽 모서리입니다. 아래 4줄은 N=1, E=2, S=4, W=8 엣지 밴드입니다.",
   },
 };
 
@@ -144,57 +144,73 @@ export function pixelLabSourceRect(mask: number, tileSize: number, shape: Fiftee
 }
 
 /**
- * PixelLab "Wang tileset" export. Values are corner masks (NW=1, NE=2, SW=4, SE=8),
- * taken from the 15-tileset index template
- * [[13,3,0,7,10],[1,6,11,2,5],[8,9,15,4,14],[6,12]].
- * The last row keeps the floor and the empty cell, then three padding slots.
- * A double-height transition sheet repeats each logical row as two square rows.
+ * PixelLab Wang sheet, 5 columns.
+ * A 5×4 sheet holds the 16 Wang 2-corner tiles in index order.
+ * A 5×8 sheet (160×256 at 32px, 40 cells) adds a 2-edge band on rows 4–7.
+ * Neither band is a 15-tileset permutation, and cells are not paired into
+ * double-height sprites.
+ *
+ * 2-corner index (rows 0–3), the standard formula:
+ *   index = NW·1 + NE·2 + SW·4 + SE·8
+ *   column = index % 5, row = floor(index / 5)
+ *   0 single, 15 full floor, 5 and 10 vertical walls, 3 and 12 horizontal edges,
+ *   1, 2, 4, 8 outer corners, 7, 11, 13, 14 inner corners.
+ * Indices 16–19 are the unused tail of the 5-wide row.
+ *
+ * 2-edge index (rows 4–7):
+ *   index = 20 + N·1 + E·2 + S·4 + W·8
+ *   Used when a painted cell has cardinal neighbours but no filled corner
+ *   (a one-tile corridor). Indices 36–39 are padding.
  */
 export const WANG_COLUMNS = 5;
 export const WANG_LOGICAL_ROWS = 4;
-export const WANG_MASK_ROWS = [
-  [8, 12, 4, 7, 11],
-  [10, 15, 5, 13, 14],
-  [2, 3, 1, 9, 6],
-  [15, 0, -1, -1, -1],
-] as const;
+export const WANG_FULL_ROWS = 8;
+/** First index of the 2-edge band on a 5×8 sheet. */
+export const WANG_EDGE_ORIGIN = 20;
 
-export function wangDoubled(rows: number): boolean {
-  return rows >= WANG_LOGICAL_ROWS * 2;
+export function wangEdgeBand(rows: number): boolean {
+  return rows >= WANG_FULL_ROWS;
 }
 
 export function wangMappedRows(rows: number): number {
-  return wangDoubled(rows) ? WANG_LOGICAL_ROWS * 2 : WANG_LOGICAL_ROWS;
+  return wangEdgeBand(rows) ? WANG_FULL_ROWS : WANG_LOGICAL_ROWS;
 }
 
-/** Corner mask at a row-major index. -1 is padding outside the Wang template. */
-export function wangCellMask(index: number, doubled: boolean): number {
+/**
+ * Corner or edge mask at a row-major index.
+ * -1 is padding (the fifth column of every fourth row).
+ * Both bands store masks 0–15; the band is which group of four rows the index is in.
+ */
+export function wangCellMask(index: number): number {
   if (!Number.isInteger(index) || index < 0) return -1;
   const column = index % WANG_COLUMNS;
-  const squareRow = Math.floor(index / WANG_COLUMNS);
-  const limit = doubled ? WANG_LOGICAL_ROWS * 2 : WANG_LOGICAL_ROWS;
-  if (squareRow >= limit) return -1;
-  const logicalRow = doubled ? Math.floor(squareRow / 2) : squareRow;
-  return WANG_MASK_ROWS[logicalRow][column];
+  const row = Math.floor(index / WANG_COLUMNS);
+  if (row >= WANG_FULL_ROWS) return -1;
+  const local = (row % WANG_LOGICAL_ROWS) * WANG_COLUMNS + column;
+  return local <= 15 ? local : -1;
 }
 
-/** First sheet index whose cell stores this mask. That cell is the full tile sprite. */
-export function wangIndexForMask(mask: number, doubled: boolean): number {
+/** Sheet index of a 2-corner mask. The index is the mask. */
+export function wangIndexForMask(mask: number): number {
   if (!Number.isInteger(mask) || mask < 0 || mask > 15) {
     throw new Error("타일 마스크는 0부터 15까지입니다.");
   }
-  const count = WANG_COLUMNS * (doubled ? WANG_LOGICAL_ROWS * 2 : WANG_LOGICAL_ROWS);
-  for (let index = 0; index < count; index += 1) {
-    if (wangCellMask(index, doubled) === mask) return index;
-  }
-  throw new Error("Wang 시트에 없는 마스크입니다.");
+  return mask;
 }
 
-export function wangSourceRect(mask: number, tileSize: number, doubled: boolean) {
+/** Sheet index of a 2-edge mask on the lower band of a 5×8 sheet. */
+export function wangEdgeIndex(mask: number): number {
+  if (!Number.isInteger(mask) || mask < 0 || mask > 15) {
+    throw new Error("타일 마스크는 0부터 15까지입니다.");
+  }
+  return WANG_EDGE_ORIGIN + mask;
+}
+
+export function wangSourceRect(mask: number, tileSize: number) {
   if (!Number.isInteger(tileSize) || tileSize <= 0) {
     throw new Error("타일 크기는 양의 정수여야 합니다.");
   }
-  const index = wangIndexForMask(mask, doubled);
+  const index = wangIndexForMask(mask);
   const column = index % WANG_COLUMNS;
   const row = Math.floor(index / WANG_COLUMNS);
   return {
@@ -202,7 +218,25 @@ export function wangSourceRect(mask: number, tileSize: number, doubled: boolean)
     x: column * tileSize,
     y: row * tileSize,
     width: tileSize,
-    height: doubled ? tileSize * 2 : tileSize,
+    height: tileSize,
+  };
+}
+
+export function wangRectForIndex(index: number, tileSize: number) {
+  if (!Number.isInteger(tileSize) || tileSize <= 0) {
+    throw new Error("타일 크기는 양의 정수여야 합니다.");
+  }
+  if (!Number.isInteger(index) || index < 0) {
+    throw new Error("Wang 시트에 없는 칸입니다.");
+  }
+  const column = index % WANG_COLUMNS;
+  const row = Math.floor(index / WANG_COLUMNS);
+  return {
+    index,
+    x: column * tileSize,
+    y: row * tileSize,
+    width: tileSize,
+    height: tileSize,
   };
 }
 
@@ -442,7 +476,7 @@ export type RuleDataFile = {
   image: "Tileset.png";
   columns: number;
   rows: number;
-  /** When true, even rows of a Wang sheet are the top of a tile that is two cells tall. */
+  /** Kept for the Unity builder. Current presets slice square cells, so this stays false. */
   doubleHeight: boolean;
   defaultSpriteIndex: number;
   outputAsset: "RuleTile.asset";
@@ -592,6 +626,58 @@ function cornerName(mask: number): string {
   return parts.join("_");
 }
 
+/** Role of a Wang 2-corner mask. Straight vertical edges are NW+SW and NE+SE. */
+export function wangCornerLabel(mask: number): string {
+  if (mask === 0) return "고립 단독";
+  if (mask === 15) return "내부 바닥";
+  if (mask === 5 || mask === 10) return "세로 벽";
+  if (mask === 3 || mask === 12) return "가로 엣지";
+  if (mask === 1 || mask === 2 || mask === 4 || mask === 8) return "바깥 코너";
+  if (mask === 7 || mask === 11 || mask === 13 || mask === 14) return "안쪽 모서리";
+  if (mask === 6 || mask === 9) return "대각";
+  return "패턴";
+}
+
+function wangEdgeLabel(mask: number): string {
+  if (mask === 0) return "고립 단독";
+  if (mask === 15) return "내부 바닥";
+  const north = (mask & 1) !== 0;
+  const east = (mask & 2) !== 0;
+  const south = (mask & 4) !== 0;
+  const west = (mask & 8) !== 0;
+  const sides = [north, east, south, west].filter(Boolean).length;
+  if (sides === 3 && !west) return "서쪽 세로 벽";
+  if (sides === 3 && !east) return "동쪽 세로 벽";
+  if (sides === 3 && !north) return "북쪽 엣지";
+  if (sides === 3 && !south) return "남쪽 엣지";
+  if (sides === 2 && north && south) return "세로 통로";
+  if (sides === 2 && east && west) return "가로 통로";
+  if (sides === 2) return "바깥 코너";
+  if (sides === 1) return "끝";
+  return "엣지";
+}
+
+function wangEdgeName(mask: number): string {
+  if (mask === 0) return "edge_single";
+  if (mask === 15) return "edge_floor";
+  return `edge_${mask.toString(16)}`;
+}
+
+/** Cardinal This/NotThis. Diagonals stay Ignore so a corner rule can outrank this band. */
+function edgeNeighbors(mask: number): Neighbors {
+  const side = (bit: number): NeighborValue => ((mask & bit) !== 0 ? 1 : 2);
+  return {
+    Top: side(1),
+    Right: side(2),
+    Bottom: side(4),
+    Left: side(8),
+    TopLeft: 0,
+    TopRight: 0,
+    BottomLeft: 0,
+    BottomRight: 0,
+  };
+}
+
 function bitCount(mask: number): number {
   let count = 0;
   let value = mask;
@@ -668,37 +754,55 @@ function slotsForPreset(preset: RulePreset, shape: FifteenShape): Slot[] {
   return fifteenSlots(shape);
 }
 
-function wangSlots(doubled: boolean): Slot[] {
-  const count = WANG_COLUMNS * (doubled ? WANG_LOGICAL_ROWS * 2 : WANG_LOGICAL_ROWS);
-  const seen = new Set<number>();
-  let fallbackSet = false;
+function wangSlots(edgeBand: boolean): Slot[] {
   const slots: Slot[] = [];
-  for (let index = 0; index < count; index += 1) {
-    const mask = wangCellMask(index, doubled);
-    if (mask < 0) continue;
-    const squareRow = Math.floor(index / WANG_COLUMNS);
-    const paired = doubled && squareRow % 2 === 1;
-    const duplicate = !paired && seen.has(mask);
-    const canonical = !paired && !duplicate;
-    if (canonical) seen.add(mask);
-    const fallback = mask === 0 && canonical && !fallbackSet;
-    if (fallback) fallbackSet = true;
-    const label = paired
-      ? `${cornerLabel(mask)} 아래`
-      : duplicate
-        ? `${cornerLabel(mask)} 복제`
-        : cornerLabel(mask);
+  for (let mask = 0; mask <= 15; mask += 1) {
     slots.push({
-      index,
+      index: mask,
       mask,
       name: cornerName(mask),
-      label,
-      neighbors: neighborsFromCornerMask(mask),
-      rule: mask !== 0 && canonical,
-      fallback,
+      label: wangCornerLabel(mask),
+      neighbors: mask === 0 ? emptyNeighbors() : actualFromCornerMask(mask),
+      rule: mask !== 0,
+      fallback: mask === 0,
+    });
+  }
+  if (!edgeBand) return slots;
+  for (let mask = 0; mask <= 15; mask += 1) {
+    slots.push({
+      index: wangEdgeIndex(mask),
+      mask,
+      name: wangEdgeName(mask),
+      label: wangEdgeLabel(mask),
+      neighbors: edgeNeighbors(mask),
+      rule: mask !== 0,
+      fallback: false,
     });
   }
   return slots;
+}
+
+function orderedRules(slots: Slot[]): RuleEntry[] {
+  return slots
+    .filter((slot) => slot.rule)
+    .map((slot) => ({
+      slot,
+      weight: countCondition(slot.neighbors, 1) * 10 + countCondition(slot.neighbors, 2),
+    }))
+    .sort((a, b) => b.weight - a.weight || a.slot.index - b.slot.index)
+    .map(({ slot }) => ({
+      index: slot.index,
+      sprite: tileSpriteName(slot.index),
+      name: slot.name,
+      label: slot.label,
+      mask: slot.mask,
+      neighbors: cloneNeighbors(slot.neighbors),
+    }));
+}
+
+/** Unity's first match for this neighbourhood, or null when the single tile (index 0) applies. */
+export function wangMatchingIndex(actual: Neighbors, edgeBand: boolean): number | null {
+  return firstMatchingRule(orderedRules(wangSlots(edgeBand)), actual);
 }
 
 function cloneNeighbors(neighbors: Neighbors): Neighbors {
@@ -732,7 +836,6 @@ export function analyzeSheet(input: {
   let columns = baseColumns;
   let rows = baseRows;
   let mappedRows = preset.rows;
-  let doubled = false;
   let shape: FifteenShape = "3x5";
 
   if (input.preset === "15-tileset") {
@@ -792,13 +895,13 @@ export function analyzeSheet(input: {
       error: `${preset.label} 프리셋은 세로 4칸(정사각) 또는 8칸(세로 2배)입니다. 현재 ${baseRows}칸입니다.`,
     };
   } else {
-    doubled = wangDoubled(baseRows);
     mappedRows = wangMappedRows(baseRows);
   }
 
   const cells = sliceSheet(input.width, input.height, sliceSize);
   const base = { columns, rows, cells, data: null, warning: null };
-  const slots = input.preset === "wang" ? wangSlots(doubled) : slotsForPreset(input.preset, shape);
+  const edgeBand = input.preset === "wang" && wangEdgeBand(mappedRows);
+  const slots = input.preset === "wang" ? wangSlots(edgeBand) : slotsForPreset(input.preset, shape);
   const slotByIndex = new Map(slots.map((slot) => [slot.index, slot]));
   const fallback = slots.find((slot) => slot.fallback);
   if (!fallback) {
@@ -831,21 +934,7 @@ export function analyzeSheet(input: {
     };
   });
 
-  const rules = slots
-    .filter((slot) => slot.rule)
-    .map((slot) => ({
-      slot,
-      weight: countCondition(slot.neighbors, 1) * 10 + countCondition(slot.neighbors, 2),
-    }))
-    .sort((a, b) => b.weight - a.weight || a.slot.index - b.slot.index)
-    .map(({ slot }) => ({
-      index: slot.index,
-      sprite: tileSpriteName(slot.index),
-      name: slot.name,
-      label: slot.label,
-      mask: slot.mask,
-      neighbors: cloneNeighbors(slot.neighbors),
-    }));
+  const rules = orderedRules(slots);
 
   const warning = rows > mappedRows
     ? `세로가 ${rows}칸입니다. 위쪽 ${mappedRows}줄만 룰에 넣습니다.`
@@ -866,7 +955,7 @@ export function analyzeSheet(input: {
       image: "Tileset.png",
       columns,
       rows,
-      doubleHeight: doubled,
+      doubleHeight: false,
       defaultSpriteIndex: fallback.index,
       outputAsset: "RuleTile.asset",
       neighborLegend: { "0": "Ignore", "1": "This", "2": "NotThis" },
@@ -884,13 +973,15 @@ export function buildRuleTileScript(): string {
 //
 // RuleData.json neighbor values: 0 = Ignore, 1 = This, 2 = NotThis.
 // Rules are stored in check order. Unity uses the first match, then m_DefaultSprite.
-// Corner sheets (15-tileset, Wang) mark the three cells around each filled corner as This
-// and leave the rest Ignore, with stricter rules first.
+// 15-tileset rules mark the three cells around each filled corner as This and leave
+// the rest Ignore, with stricter rules first.
 // PixelLab 15-tileset is 3 columns by 5 rows (indices 0-14). A native 4x4 or 4x8
 // sheet is accepted too and keeps the 16-role order.
-// Wang sheets are 5 columns. Square tiles use 4 rows. A double-height transition
-// sheet is 8 rows (40 cells); doubleHeight makes each even row's sprite two cells tall
-// and RuleData.json indexes that 5x8 grid. The lower half keeps the same mask.
+// Wang sheets are 5 columns of square cells. The 2-corner index is the mask:
+// index = NW + 2*NE + 4*SW + 8*SE, so tile 15 is the full floor and tile 11 is an
+// inner corner, not the floor. A 5x8 sheet adds a 2-edge band at indices 20-35
+// (N=1, E=2, S=4, W=8). RuleData.json lists those neighbours; this builder does not
+// remap them. doubleHeight is unused for that grid and stays false.
 // Godot 47-blob is the 12x4 3x3-minimal template (47 rules). A PixelLab Godot
 // download that is 24x8 base cells is sliced as that template at twice the tile size.
 // Each rule sets the four sides to This or NotThis. A diagonal is This or NotThis

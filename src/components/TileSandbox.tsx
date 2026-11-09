@@ -5,12 +5,9 @@ import { useEffect, useRef, useState } from "react";
 import {
   SANDBOX_CELL_PX,
   SANDBOX_SIZE,
-  blobMaskAt,
-  cardinalMaskAt,
   emptySandbox,
   paintCell,
   sandboxSourceRect,
-  sandboxTileIndex,
   type SandboxLayout,
 } from "@/lib/tileSandbox";
 
@@ -82,30 +79,26 @@ export function TileSandbox({ previewUrl, tileSize, canSample, layout }: Props) 
         const dy = y * SANDBOX_CELL_PX;
         context.fillStyle = (x + y) % 2 === 0 ? "#141820" : "#1b2230";
         context.fillRect(dx, dy, SANDBOX_CELL_PX, SANDBOX_CELL_PX);
-        const index = sandboxTileIndex(grid, x, y, SANDBOX_SIZE, layout);
-        if (index !== null) {
-          const mask = cardinalMaskAt(grid, x, y);
-          const source = image && image.complete && image.naturalWidth > 0
-            ? sandboxSourceRect(grid, x, y, tileSize, SANDBOX_SIZE, layout)
-            : null;
-          if (source && image) {
+        const sample = sandboxSourceRect(grid, x, y, tileSize, SANDBOX_SIZE, layout);
+        if (sample) {
+          if (image && image.complete && image.naturalWidth > 0) {
             context.drawImage(
               image,
-              source.x,
-              source.y,
-              source.width,
-              source.height,
+              sample.x,
+              sample.y,
+              sample.width,
+              sample.height,
               dx,
               dy,
               SANDBOX_CELL_PX,
               SANDBOX_CELL_PX,
             );
           } else {
-            context.fillStyle = MASK_COLORS[mask] ?? "#ece7df";
+            context.fillStyle = MASK_COLORS[sample.mask & 15] ?? "#ece7df";
             context.fillRect(dx + 1, dy + 1, SANDBOX_CELL_PX - 2, SANDBOX_CELL_PX - 2);
             context.fillStyle = "#101318";
             context.font = "11px ui-monospace, monospace";
-            context.fillText(String(index), dx + 4, dy + 14);
+            context.fillText(String(sample.index), dx + 4, dy + 14);
           }
         }
         context.strokeStyle = "rgba(255,255,255,0.14)";
@@ -134,13 +127,8 @@ export function TileSandbox({ previewUrl, tileSize, canSample, layout }: Props) 
     setCells((current) => paintCell(current, x, y, value));
   }
 
-  const hoverMask = hover && cells[hover.y * SANDBOX_SIZE + hover.x] === 1
-    ? layout.kind === "godot"
-      ? blobMaskAt(cells, hover.x, hover.y)
-      : cardinalMaskAt(cells, hover.x, hover.y)
-    : null;
-  const hoverIndex = hover && hoverMask !== null
-    ? sandboxTileIndex(cells, hover.x, hover.y, SANDBOX_SIZE, layout)
+  const hoverSample = hover
+    ? sandboxSourceRect(cells, hover.x, hover.y, tileSize, SANDBOX_SIZE, layout)
     : null;
 
   return (
@@ -149,7 +137,7 @@ export function TileSandbox({ previewUrl, tileSize, canSample, layout }: Props) 
         <div>
           <h2 className="text-sm font-semibold text-[#ece7df]">실시간 붓칠 샌드박스</h2>
           <p className="mt-1 text-xs leading-5 text-[#9aa3b5]">
-            8×8 칸, 각 32px. 좌클릭은 채우고 우클릭은 지웁니다. 15-tileset과 Wang은 Up=1, Right=2, Down=4, Left=8. Godot은 8방향 blob입니다.
+            8×8 칸, 각 32px. 좌클릭은 채우고 우클릭은 지웁니다. Wang은 이웃 8칸의 2-corner 인덱스로 바닥과 벽을 고릅니다.
           </p>
         </div>
         <div className="flex flex-wrap gap-1.5" role="toolbar" aria-label="샌드박스 도구">
@@ -230,12 +218,12 @@ export function TileSandbox({ previewUrl, tileSize, canSample, layout }: Props) 
 
       <p className="mt-2 font-mono text-[11px] text-[#9aa3b5]" role="status">
         {hover
-          ? `(${hover.x}, ${hover.y}) · ${hoverMask === null ? "비어 있음" : `마스크 ${hoverMask} · 타일 ${hoverIndex}`}`
+          ? `(${hover.x}, ${hover.y}) · ${hoverSample === null ? "비어 있음" : `마스크 ${hoverSample.mask} · 타일 ${hoverSample.index}`}`
           : canSample
             ? layout.kind === "wang"
-              ? layout.doubled
-                ? "Wang 5×8 시트의 칸을 잘라 마스크와 1:1로 그립니다."
-                : "Wang 5×4 시트의 칸을 잘라 마스크와 1:1로 그립니다."
+              ? layout.edgeBand
+                ? "Wang 5×8은 2-corner 인덱스로 이웃 8칸을 검사해 바닥·벽·모서리를 고릅니다."
+                : "Wang 5×4는 2-corner 인덱스로 이웃 8칸을 검사해 바닥·벽·모서리를 고릅니다."
               : layout.kind === "godot"
                 ? "Godot 47-Blob 템플릿의 칸을 8방향 이웃에 맞춰 그립니다."
                 : layout.shape === "4x4"

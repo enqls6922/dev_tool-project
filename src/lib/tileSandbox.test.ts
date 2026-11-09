@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { FIFTEEN_TILE_MASKS, godotCellForMask, pixelLabTileIndex, wangIndexForMask } from "./ruleTile.ts";
+import { FIFTEEN_TILE_MASKS, godotCellForMask, pixelLabTileIndex, wangEdgeIndex } from "./ruleTile.ts";
 import {
   CARDINAL,
   cardinalMaskAt,
@@ -25,7 +25,7 @@ test("every cardinal mask maps onto the 3x5 PixelLab sheet", () => {
   assert.equal(pixelLabTileIndex(15, "4x4"), 6);
 });
 
-test("painting a cell refreshes that cell and its four neighbors", () => {
+test("painting a cell refreshes that cell and its eight neighbors", () => {
   let cells = emptySandbox();
   cells = paintCell(cells, 3, 3, 1);
   cells = paintCell(cells, 3, 2, 1);
@@ -48,6 +48,10 @@ test("painting a cell refreshes that cell and its four neighbors", () => {
     { x: 4, y: 3 },
     { x: 3, y: 4 },
     { x: 2, y: 3 },
+    { x: 4, y: 2 },
+    { x: 4, y: 4 },
+    { x: 2, y: 4 },
+    { x: 2, y: 2 },
   ]);
 
   const erased = paintCell(cells, 3, 2, 0);
@@ -55,30 +59,52 @@ test("painting a cell refreshes that cell and its four neighbors", () => {
   assert.equal(sandboxTileIndex(erased, 3, 2), null);
 });
 
-test("a 5x8 Wang sheet crops the full logical tile instead of the mask number", () => {
-  let cells = emptySandbox();
-  cells = paintCell(cells, 1, 1, 1);
-  const layout = { kind: "wang" as const, doubled: true };
-  const alone = sandboxSourceRect(cells, 1, 1, 32, 8, layout);
-  assert.ok(alone);
-  assert.equal(alone.mask, 0);
-  assert.equal(alone.index, wangIndexForMask(0, true));
-  assert.equal(alone.width, 32);
-  assert.equal(alone.height, 64);
-  assert.equal(sandboxTileIndex(cells, 1, 1, 8, layout), wangIndexForMask(0, true));
+function fillRect(cells: number[], x0: number, y0: number, x1: number, y1: number): number[] {
+  let next = cells;
+  for (let y = y0; y <= y1; y += 1) {
+    for (let x = x0; x <= x1; x += 1) next = paintCell(next, x, y, 1);
+  }
+  return next;
+}
 
-  cells = paintCell(cells, 1, 0, 1);
-  cells = paintCell(cells, 2, 1, 1);
-  cells = paintCell(cells, 1, 2, 1);
-  cells = paintCell(cells, 0, 1, 1);
-  const full = sandboxSourceRect(cells, 1, 1, 32, 8, layout);
-  assert.ok(full);
-  assert.equal(full.mask, 15);
+test("a 5x8 Wang rectangle fills the floor and keeps square border tiles", () => {
+  const layout = { kind: "wang" as const, edgeBand: true };
+  let cells = fillRect(emptySandbox(), 2, 2, 5, 4);
+
+  const at = (x: number, y: number) => sandboxSourceRect(cells, x, y, 32, 8, layout);
+  const interior = at(3, 3);
+  assert.ok(interior);
+  assert.equal(interior.index, 15);
+  assert.equal(interior.mask, 15);
   assert.deepEqual(
-    { x: full.x, y: full.y, width: full.width, height: full.height },
-    { x: 32, y: 64, width: 32, height: 64 },
+    { x: interior.x, y: interior.y, width: interior.width, height: interior.height },
+    { x: 0, y: 96, width: 32, height: 32 },
   );
-  assert.notEqual(full.index, full.mask);
+  assert.equal(at(4, 3)?.index, 15);
+  assert.equal(at(3, 2)?.index, 12);
+  assert.equal(at(3, 4)?.index, 3);
+  assert.equal(at(2, 3)?.index, 10);
+  assert.equal(at(5, 3)?.index, 5);
+  assert.equal(at(2, 2)?.index, 8);
+  assert.equal(at(5, 2)?.index, 4);
+  assert.equal(at(2, 4)?.index, 2);
+  assert.equal(at(5, 4)?.index, 1);
+  assert.notEqual(at(3, 3)?.index, 11);
+
+  cells = paintCell(cells, 4, 2, 0);
+  assert.equal(sandboxTileIndex(cells, 3, 3, 8, layout), 13);
+
+  const alone = sandboxSourceRect(fillRect(emptySandbox(), 1, 1, 1, 1), 1, 1, 32, 8, layout);
+  assert.ok(alone);
+  assert.equal(alone.index, 0);
+  assert.equal(alone.width, 32);
+  assert.equal(alone.height, 32);
+
+  let corridor = emptySandbox();
+  corridor = paintCell(corridor, 2, 3, 1);
+  corridor = paintCell(corridor, 3, 3, 1);
+  corridor = paintCell(corridor, 4, 3, 1);
+  assert.equal(sandboxTileIndex(corridor, 3, 3, 8, layout), wangEdgeIndex(2 | 8));
 });
 
 test("a Godot sandbox cell samples the 47-blob template", () => {
