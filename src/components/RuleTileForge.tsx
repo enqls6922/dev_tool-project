@@ -9,6 +9,7 @@ import { RuleTilePreview } from "@/components/RuleTilePreview";
 import { TileSandbox } from "@/components/TileSandbox";
 import { useRuleTileForge } from "@/hooks/useRuleTileForge";
 import { safeDisplayName } from "@/lib/uploadPolicy";
+import { FIFTEEN_LAYOUT, type SandboxLayout } from "@/lib/tileSandbox";
 import {
   DIRECTION_KEYS,
   PRESET_INFO,
@@ -26,6 +27,15 @@ export function RuleTileForge() {
   const preset = PRESET_INFO[forge.preset];
   const data = forge.analysis?.data ?? null;
   const previewError = forge.error ?? forge.analysis?.error ?? null;
+  const sandboxLayout: SandboxLayout = data?.preset === "wang"
+    ? { kind: "wang", doubled: data.doubleHeight }
+    : FIFTEEN_LAYOUT;
+  const canSample = Boolean(
+    data && (
+      (data.preset === "15-tileset" && data.columns === 4 && data.rows >= 4)
+      || (data.preset === "wang" && data.columns === 5 && (data.rows === 4 || data.rows >= 8))
+    ),
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -176,12 +186,8 @@ export function RuleTileForge() {
         <TileSandbox
           previewUrl={forge.previewUrl}
           tileSize={forge.tileSize}
-          canSample={
-            forge.preset === "15-tileset" &&
-            !forge.analysis?.error &&
-            forge.analysis?.columns === 4 &&
-            (forge.analysis?.rows ?? 0) >= 4
-          }
+          canSample={canSample}
+          layout={sandboxLayout}
         />
         <RuleTilePreview
           previewUrl={forge.previewUrl}

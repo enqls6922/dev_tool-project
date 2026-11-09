@@ -58,9 +58,9 @@ export const PRESET_INFO: Record<RulePreset, PresetInfo> = {
   wang: {
     id: "wang",
     label: "Wang",
-    columns: 4,
+    columns: 5,
     rows: 4,
-    hint: "4×4 코너 마스크 순. 0번은 빈 칸, 15번은 내부 바닥입니다. NW=1, NE=2, SW=4, SE=8.",
+    hint: "PixelLab Wang은 가로 5열입니다. 32px 정사각은 160×128(5×4), 세로 2배 트랜지션은 160×256(5×8, 40칸)입니다. NW=1, NE=2, SW=4, SE=8.",
   },
   "godot-3x3": {
     id: "godot-3x3",
@@ -109,6 +109,69 @@ export function pixelLabSourceRect(mask: number, tileSize: number) {
   };
 }
 
+/**
+ * PixelLab "Wang tileset" export. Values are corner masks (NW=1, NE=2, SW=4, SE=8),
+ * taken from the 15-tileset index template
+ * [[13,3,0,7,10],[1,6,11,2,5],[8,9,15,4,14],[6,12]].
+ * The last row keeps the floor and the empty cell, then three padding slots.
+ * A double-height transition sheet repeats each logical row as two square rows.
+ */
+export const WANG_COLUMNS = 5;
+export const WANG_LOGICAL_ROWS = 4;
+export const WANG_MASK_ROWS = [
+  [8, 12, 4, 7, 11],
+  [10, 15, 5, 13, 14],
+  [2, 3, 1, 9, 6],
+  [15, 0, -1, -1, -1],
+] as const;
+
+export function wangDoubled(rows: number): boolean {
+  return rows >= WANG_LOGICAL_ROWS * 2;
+}
+
+export function wangMappedRows(rows: number): number {
+  return wangDoubled(rows) ? WANG_LOGICAL_ROWS * 2 : WANG_LOGICAL_ROWS;
+}
+
+/** Corner mask at a row-major index. -1 is padding outside the Wang template. */
+export function wangCellMask(index: number, doubled: boolean): number {
+  if (!Number.isInteger(index) || index < 0) return -1;
+  const column = index % WANG_COLUMNS;
+  const squareRow = Math.floor(index / WANG_COLUMNS);
+  const limit = doubled ? WANG_LOGICAL_ROWS * 2 : WANG_LOGICAL_ROWS;
+  if (squareRow >= limit) return -1;
+  const logicalRow = doubled ? Math.floor(squareRow / 2) : squareRow;
+  return WANG_MASK_ROWS[logicalRow][column];
+}
+
+/** First sheet index whose cell stores this mask. That cell is the full tile sprite. */
+export function wangIndexForMask(mask: number, doubled: boolean): number {
+  if (!Number.isInteger(mask) || mask < 0 || mask > 15) {
+    throw new Error("타일 마스크는 0부터 15까지입니다.");
+  }
+  const count = WANG_COLUMNS * (doubled ? WANG_LOGICAL_ROWS * 2 : WANG_LOGICAL_ROWS);
+  for (let index = 0; index < count; index += 1) {
+    if (wangCellMask(index, doubled) === mask) return index;
+  }
+  throw new Error("Wang 시트에 없는 마스크입니다.");
+}
+
+export function wangSourceRect(mask: number, tileSize: number, doubled: boolean) {
+  if (!Number.isInteger(tileSize) || tileSize <= 0) {
+    throw new Error("타일 크기는 양의 정수여야 합니다.");
+  }
+  const index = wangIndexForMask(mask, doubled);
+  const column = index % WANG_COLUMNS;
+  const row = Math.floor(index / WANG_COLUMNS);
+  return {
+    index,
+    x: column * tileSize,
+    y: row * tileSize,
+    width: tileSize,
+    height: doubled ? tileSize * 2 : tileSize,
+  };
+}
+
 const CORNER_BITS = [
   { bit: 1, dirs: ["TopLeft", "Top", "Left"] },
   { bit: 2, dirs: ["Top", "TopRight", "Right"] },
@@ -126,7 +189,7 @@ export type SheetCell = {
   height: number;
 };
 
-export type RuleRole = "rule" | "default" | "unmapped";
+export type RuleRole = "rule" | "default" | "paired" | "unmapped";
 
 export type RuleCell = SheetCell & {
   sprite: string;
@@ -156,6 +219,8 @@ export type RuleDataFile = {
   image: "Tileset.png";
   columns: number;
   rows: number;
+  /** When true, even rows of a Wang sheet are the top of a tile that is two cells tall. */
+  doubleHeight: boolean;
   defaultSpriteIndex: number;
   outputAsset: "RuleTile.asset";
   neighborLegend: {
@@ -361,11 +426,11 @@ function slotsForPreset(preset: RulePreset): Slot[] {
     }));
   }
 
-  const masks = preset === "15-tileset"
-    ? FIFTEEN_TILE_MASKS
-    : Array.from({ length: 16 }, (_, index) => index);
+  if (preset === "wang") {
+    throw new Error("Wang 슬롯은 시트 높이에 따라 wangSlots로 만듭니다.");
+  }
 
-  return masks.map((mask, index) => ({
+  return FIFTEEN_TILE_MASKS.map((mask, index) => ({
     index,
     mask,
     name: cornerName(mask),
@@ -374,6 +439,39 @@ function slotsForPreset(preset: RulePreset): Slot[] {
     rule: mask !== 0,
     fallback: mask === 0,
   }));
+}
+
+function wangSlots(doubled: boolean): Slot[] {
+  const count = WANG_COLUMNS * (doubled ? WANG_LOGICAL_ROWS * 2 : WANG_LOGICAL_ROWS);
+  const seen = new Set<number>();
+  let fallbackSet = false;
+  const slots: Slot[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const mask = wangCellMask(index, doubled);
+    if (mask < 0) continue;
+    const squareRow = Math.floor(index / WANG_COLUMNS);
+    const paired = doubled && squareRow % 2 === 1;
+    const duplicate = !paired && seen.has(mask);
+    const canonical = !paired && !duplicate;
+    if (canonical) seen.add(mask);
+    const fallback = mask === 0 && canonical && !fallbackSet;
+    if (fallback) fallbackSet = true;
+    const label = paired
+      ? `${cornerLabel(mask)} 아래`
+      : duplicate
+        ? `${cornerLabel(mask)} 복제`
+        : cornerLabel(mask);
+    slots.push({
+      index,
+      mask,
+      name: cornerName(mask),
+      label,
+      neighbors: neighborsFromCornerMask(mask),
+      rule: mask !== 0 && canonical,
+      fallback,
+    });
+  }
+  return slots;
 }
 
 function cloneNeighbors(neighbors: Neighbors): Neighbors {
@@ -412,14 +510,26 @@ export function analyzeSheet(input: {
       error: `${preset.label} 프리셋은 가로 ${preset.columns}칸입니다. 이 시트는 ${columns}칸입니다.`,
     };
   }
-  if (rows < preset.rows) {
+
+  let mappedRows = preset.rows;
+  let doubled = false;
+  if (input.preset === "wang") {
+    if (rows !== WANG_LOGICAL_ROWS && rows < WANG_LOGICAL_ROWS * 2) {
+      return {
+        ...base,
+        error: `${preset.label} 프리셋은 세로 4칸(정사각) 또는 8칸(세로 2배)입니다. 현재 ${rows}칸입니다.`,
+      };
+    }
+    doubled = wangDoubled(rows);
+    mappedRows = wangMappedRows(rows);
+  } else if (rows < preset.rows) {
     return {
       ...base,
       error: `${preset.label} 프리셋은 세로 ${preset.rows}칸이 필요합니다. 현재 ${rows}칸입니다.`,
     };
   }
 
-  const slots = slotsForPreset(input.preset);
+  const slots = input.preset === "wang" ? wangSlots(doubled) : slotsForPreset(input.preset);
   const slotByIndex = new Map(slots.map((slot) => [slot.index, slot]));
   const fallback = slots.find((slot) => slot.fallback);
   if (!fallback) {
@@ -428,7 +538,7 @@ export function analyzeSheet(input: {
 
   const mappedCells: RuleCell[] = cells.map((cell) => {
     const slot = slotByIndex.get(cell.index);
-    if (!slot || cell.row >= preset.rows) {
+    if (!slot || cell.row >= mappedRows) {
       return {
         ...cell,
         sprite: tileSpriteName(cell.index),
@@ -446,7 +556,7 @@ export function analyzeSheet(input: {
       name: slot.name,
       label: slot.label,
       mask: slot.mask,
-      role: slot.rule ? "rule" : "default",
+      role: slot.rule ? "rule" : slot.fallback ? "default" : "paired",
       fallback: slot.fallback,
       neighbors: cloneNeighbors(slot.neighbors),
     };
@@ -468,8 +578,8 @@ export function analyzeSheet(input: {
       neighbors: cloneNeighbors(slot.neighbors),
     }));
 
-  const warning = rows > preset.rows
-    ? `세로가 ${rows}칸입니다. 위쪽 ${preset.rows}줄만 룰에 넣습니다.`
+  const warning = rows > mappedRows
+    ? `세로가 ${rows}칸입니다. 위쪽 ${mappedRows}줄만 룰에 넣습니다.`
     : null;
 
   return {
@@ -487,6 +597,7 @@ export function analyzeSheet(input: {
       image: "Tileset.png",
       columns,
       rows,
+      doubleHeight: doubled,
       defaultSpriteIndex: fallback.index,
       outputAsset: "RuleTile.asset",
       neighborLegend: { "0": "Ignore", "1": "This", "2": "NotThis" },
@@ -506,6 +617,9 @@ export function buildRuleTileScript(): string {
 // Rules are stored in check order. Unity uses the first match, then m_DefaultSprite.
 // Corner sheets (15-tileset, Wang) mark the three cells around each filled corner as This
 // and leave the rest Ignore, with stricter rules first.
+// Wang sheets are 5 columns. Square tiles use 4 rows. A double-height transition
+// sheet is 8 rows (40 cells); doubleHeight makes each even row's sprite two cells tall
+// and RuleData.json indexes that 5x8 grid. The lower half keeps the same mask.
 // Godot 3x3 marks every direction This or NotThis.
 #if UNITY_EDITOR
 using System;
@@ -672,12 +786,18 @@ public static class RuleTileBuilder
             {
                 var spriteId = GUID.Generate();
                 var name = "tile_" + index.ToString("00");
+                var spriteHeight = data.tileSize;
                 var unityY = texture.height - (row + 1) * data.tileSize;
+                if (data.doubleHeight && row % 2 == 0)
+                {
+                    spriteHeight = data.tileSize * 2;
+                    unityY = texture.height - (row + 2) * data.tileSize;
+                }
                 rects[index] = new SpriteRect
                 {
                     name = name,
                     spriteID = spriteId,
-                    rect = new Rect(column * data.tileSize, unityY, data.tileSize, data.tileSize),
+                    rect = new Rect(column * data.tileSize, unityY, data.tileSize, spriteHeight),
                     alignment = SpriteAlignment.Center,
                     pivot = new Vector2(0.5f, 0.5f),
                     border = Vector4.zero
@@ -773,6 +893,7 @@ public class SpriteForgeRuleData
     public int tileSize;
     public int columns;
     public int rows;
+    public bool doubleHeight;
     public int defaultSpriteIndex;
     public SpriteForgeRuleEntry[] rules;
 }

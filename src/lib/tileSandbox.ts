@@ -1,4 +1,10 @@
-import { pixelLabSourceRect, pixelLabTileIndex } from "./ruleTile.ts";
+import { pixelLabSourceRect, pixelLabTileIndex, wangSourceRect } from "./ruleTile.ts";
+
+export type SandboxLayout =
+  | { kind: "fifteen" }
+  | { kind: "wang"; doubled: boolean };
+
+export const FIFTEEN_LAYOUT: SandboxLayout = { kind: "fifteen" };
 
 export const SANDBOX_SIZE = 8;
 export const SANDBOX_CELL_PX = 32;
@@ -49,16 +55,21 @@ export function cellsTouchedByEdit(
   return coords;
 }
 
-/** Filled cells map 1:1 onto the PixelLab 15-tileset sheet. Empty cells draw nothing. */
+function sheetIndexForMask(mask: number, layout: SandboxLayout): number {
+  return layout.kind === "wang" ? wangSourceRect(mask, 1, layout.doubled).index : pixelLabTileIndex(mask);
+}
+
+/** Filled cells map 1:1 onto the active PixelLab sheet. Empty cells draw nothing. */
 export function sandboxTileIndex(
   cells: readonly number[],
   x: number,
   y: number,
   size = SANDBOX_SIZE,
+  layout: SandboxLayout = FIFTEEN_LAYOUT,
 ): number | null {
   if (x < 0 || y < 0 || x >= size || y >= size) return null;
   if (cells[y * size + x] !== 1) return null;
-  return pixelLabTileIndex(cardinalMaskAt(cells, x, y, size));
+  return sheetIndexForMask(cardinalMaskAt(cells, x, y, size), layout);
 }
 
 export function sandboxSourceRect(
@@ -67,11 +78,15 @@ export function sandboxSourceRect(
   y: number,
   tileSize: number,
   size = SANDBOX_SIZE,
+  layout: SandboxLayout = FIFTEEN_LAYOUT,
 ) {
-  const index = sandboxTileIndex(cells, x, y, size);
+  const index = sandboxTileIndex(cells, x, y, size, layout);
   if (index === null) return null;
   const mask = cardinalMaskAt(cells, x, y, size);
-  return { ...pixelLabSourceRect(mask, tileSize), mask };
+  const source = layout.kind === "wang"
+    ? wangSourceRect(mask, tileSize, layout.doubled)
+    : pixelLabSourceRect(mask, tileSize);
+  return { ...source, mask };
 }
 
 export function paintCell(
