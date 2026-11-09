@@ -1,17 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { sanitizeDownloadName } from "@/lib/fileNames";
 import { canvasToPngBlob } from "@/lib/exportPack";
 import { downloadMotionJson, downloadMotionPng } from "@/lib/exportMotion";
 import {
   drawImageToCanvas,
-  isPngFile,
   loadImage,
   MAX_IMAGE_EDGE,
   toSpriteName,
   uniqueSpriteNames,
   type OpaqueBounds,
 } from "@/lib/imageProcessor";
+import { formatRasterRejection, partitionRasterFiles } from "@/lib/uploadPolicy";
 import {
   buildMotionDocument,
   compareFileNames,
@@ -64,7 +65,7 @@ async function decodeFrame(file: File): Promise<MotionFrame> {
     return {
       id,
       name,
-      fileName: file.name,
+      fileName: sanitizeDownloadName(file.name),
       status: bounds ? "ready" : "empty",
       message: bounds ? undefined : "알파 30을 넘는 픽셀이 없습니다.",
       sourceWidth: sourceCanvas.width,
@@ -77,7 +78,7 @@ async function decodeFrame(file: File): Promise<MotionFrame> {
     return {
       id,
       name,
-      fileName: file.name,
+      fileName: sanitizeDownloadName(file.name),
       status: "error",
       message: caught instanceof Error ? caught.message : "이 파일을 읽지 못했습니다.",
       sourceWidth: 0,
@@ -154,16 +155,10 @@ export function useMotionStabilizer(active: boolean) {
   }, [active, playing, fps, playable.length]);
 
   async function ingest(files: File[], generation: number) {
-    const accepted = files.filter((file) => isPngFile(file));
-    const rejected = files.filter((file) => !isPngFile(file));
+    const { accepted, rejected } = partitionRasterFiles(files);
     if (!mountedRef.current || generation !== generationRef.current) return;
     if (rejected.length > 0) {
-      const sample = rejected
-        .slice(0, 4)
-        .map((file) => file.name || "unnamed")
-        .join(", ");
-      const extra = rejected.length > 4 ? ` 외 ${rejected.length - 4}개` : "";
-      setNotice(`PNG가 아니라 건너뛰었습니다: ${sample}${extra}`);
+      setNotice(formatRasterRejection(rejected));
     } else if (accepted.length > 0) {
       setNotice(null);
     }

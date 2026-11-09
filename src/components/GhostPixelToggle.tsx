@@ -19,9 +19,9 @@ export function GhostPixelToggle({ checked, onChange, detail, className = "mt-4"
         className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-[#2a3140] bg-[#0d1016] px-3 py-3"
       >
         <span>
-          <span className="block text-sm font-medium text-[#ece7df]">AI 고스트 픽셀 제거 (Alpha &lt; 30 청소)</span>
+          <span className="block text-sm font-medium text-[#ece7df]">AI 고스트 픽셀 제거</span>
           <span className="mt-0.5 block text-xs leading-5 text-[#9aa3b5]">
-            알파가 1 이상 30 이하인 반투명 점 노이즈를 완전 투명으로 바꿉니다.
+            알파가 0보다 크고 30보다 작은 픽셀의 RGBA를 (0, 0, 0, 0)으로 지웁니다.
           </span>
         </span>
         <input

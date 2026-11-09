@@ -1,0 +1,231 @@
+"use client";
+
+import { Eraser, Paintbrush, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import {
+  SANDBOX_CELL_PX,
+  SANDBOX_SIZE,
+  cardinalMaskAt,
+  emptySandbox,
+  paintCell,
+  sandboxTileIndex,
+} from "@/lib/tileSandbox";
+import { pixelLabSourceRect } from "@/lib/ruleTile";
+
+type Tool = "brush" | "eraser";
+
+type Props = {
+  previewUrl: string | null;
+  tileSize: number;
+  canSample: boolean;
+};
+
+const MASK_COLORS = [
+  "#5c6b82",
+  "#d4654a",
+  "#e39b4b",
+  "#f0c36a",
+  "#7dbe6a",
+  "#3faf8a",
+  "#4aa3c7",
+  "#6d7fd6",
+  "#a56bd4",
+  "#d46b9a",
+  "#c45b4a",
+  "#8a9a4a",
+  "#4a8a7a",
+  "#4a6a9a",
+  "#9a6a4a",
+  "#ece7df",
+];
+
+export function TileSandbox({ previewUrl, tileSize, canSample }: Props) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [tool, setTool] = useState<Tool>("brush");
+  const [cells, setCells] = useState<number[]>(() => emptySandbox());
+  const [hover, setHover] = useState<{ x: number; y: number } | null>(null);
+  const [loadedSheet, setLoadedSheet] = useState<{ url: string; image: HTMLImageElement } | null>(null);
+  const paintingRef = useRef(false);
+  const sheet = loadedSheet && loadedSheet.url === previewUrl && canSample ? loadedSheet.image : null;
+
+  useEffect(() => {
+    if (!previewUrl || !canSample) return;
+    let cancelled = false;
+    const image = new Image();
+    image.onload = () => {
+      if (!cancelled) setLoadedSheet({ url: previewUrl, image });
+    };
+    image.onerror = () => {
+      if (!cancelled) setLoadedSheet(null);
+    };
+    image.src = previewUrl;
+    return () => {
+      cancelled = true;
+    };
+  }, [previewUrl, canSample]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    const grid = cells;
+    const image = sheet;
+    context.imageSmoothingEnabled = false;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    for (let y = 0; y < SANDBOX_SIZE; y += 1) {
+      for (let x = 0; x < SANDBOX_SIZE; x += 1) {
+        const dx = x * SANDBOX_CELL_PX;
+        const dy = y * SANDBOX_CELL_PX;
+        context.fillStyle = (x + y) % 2 === 0 ? "#141820" : "#1b2230";
+        context.fillRect(dx, dy, SANDBOX_CELL_PX, SANDBOX_CELL_PX);
+        const index = sandboxTileIndex(grid, x, y);
+        if (index !== null) {
+          const mask = cardinalMaskAt(grid, x, y);
+          if (image && image.complete && image.naturalWidth > 0) {
+            const source = pixelLabSourceRect(mask, tileSize);
+            context.drawImage(
+              image,
+              source.x,
+              source.y,
+              source.width,
+              source.height,
+              dx,
+              dy,
+              SANDBOX_CELL_PX,
+              SANDBOX_CELL_PX,
+            );
+          } else {
+            context.fillStyle = MASK_COLORS[mask] ?? "#ece7df";
+            context.fillRect(dx + 1, dy + 1, SANDBOX_CELL_PX - 2, SANDBOX_CELL_PX - 2);
+            context.fillStyle = "#101318";
+            context.font = "11px ui-monospace, monospace";
+            context.fillText(String(index), dx + 4, dy + 14);
+          }
+        }
+        context.strokeStyle = "rgba(255,255,255,0.14)";
+        context.strokeRect(dx + 0.5, dy + 0.5, SANDBOX_CELL_PX - 1, SANDBOX_CELL_PX - 1);
+      }
+    }
+  }, [cells, sheet, tileSize]);
+
+  function cellFromEvent(event: { clientX: number; clientY: number; currentTarget: HTMLCanvasElement }) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = Math.floor(((event.clientX - rect.left) / rect.width) * SANDBOX_SIZE);
+    const y = Math.floor(((event.clientY - rect.top) / rect.height) * SANDBOX_SIZE);
+    return {
+      x: Math.min(SANDBOX_SIZE - 1, Math.max(0, x)),
+      y: Math.min(SANDBOX_SIZE - 1, Math.max(0, y)),
+    };
+  }
+
+  function valueFor(event: { button: number; buttons: number }): 0 | 1 | null {
+    if ((event.buttons & 2) === 2 || event.button === 2) return 0;
+    if ((event.buttons & 1) !== 1 && event.button !== 0) return null;
+    return tool === "eraser" ? 0 : 1;
+  }
+
+  function apply(x: number, y: number, value: 0 | 1) {
+    setCells((current) => paintCell(current, x, y, value));
+  }
+
+  const hoverMask = hover && cells[hover.y * SANDBOX_SIZE + hover.x] === 1
+    ? cardinalMaskAt(cells, hover.x, hover.y)
+    : null;
+  const hoverIndex = hover && hoverMask !== null ? sandboxTileIndex(cells, hover.x, hover.y) : null;
+
+  return (
+    <section className="rounded-2xl border border-[#2a3140] bg-[#13171f]/95 p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)]">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold text-[#ece7df]">실시간 붓칠 샌드박스</h2>
+          <p className="mt-1 text-xs leading-5 text-[#9aa3b5]">
+            8×8 칸, 각 32px. 좌클릭은 채우고 우클릭은 지웁니다. 마스크 Up=1, Right=2, Down=4, Left=8.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-1.5" role="toolbar" aria-label="샌드박스 도구">
+          <button
+            type="button"
+            aria-pressed={tool === "brush"}
+            onClick={() => setTool("brush")}
+            className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition ${
+              tool === "brush"
+                ? "border-[#e39b4b] bg-[#e39b4b]/15 text-[#f3d2a8]"
+                : "border-[#2a3140] bg-[#0d1016] text-[#c5cbd6] hover:border-[#465066]"
+            }`}
+          >
+            <Paintbrush className="size-3.5" aria-hidden />
+            브러시
+          </button>
+          <button
+            type="button"
+            aria-pressed={tool === "eraser"}
+            onClick={() => setTool("eraser")}
+            className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition ${
+              tool === "eraser"
+                ? "border-[#e39b4b] bg-[#e39b4b]/15 text-[#f3d2a8]"
+                : "border-[#2a3140] bg-[#0d1016] text-[#c5cbd6] hover:border-[#465066]"
+            }`}
+          >
+            <Eraser className="size-3.5" aria-hidden />
+            지우개
+          </button>
+          <button
+            type="button"
+            onClick={() => setCells(emptySandbox())}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#2a3140] bg-[#0d1016] px-3 text-xs font-medium text-[#c5cbd6] transition hover:border-[#465066] hover:text-[#ece7df]"
+          >
+            <Trash2 className="size-3.5" aria-hidden />
+            전체 지우기
+          </button>
+        </div>
+      </div>
+
+      <div className="checkerboard inline-block max-w-full overflow-auto rounded-xl border border-[#2a3140]">
+        <canvas
+          ref={canvasRef}
+          width={SANDBOX_SIZE * SANDBOX_CELL_PX}
+          height={SANDBOX_SIZE * SANDBOX_CELL_PX}
+          role="application"
+          aria-label="8 by 8 PixelLab 타일 샌드박스"
+          className="block max-w-full touch-none"
+          style={{ width: SANDBOX_SIZE * SANDBOX_CELL_PX, height: SANDBOX_SIZE * SANDBOX_CELL_PX, imageRendering: "pixelated" }}
+          onContextMenu={(event) => event.preventDefault()}
+          onPointerDown={(event) => {
+            if (event.button !== 0 && event.button !== 2) return;
+            event.currentTarget.setPointerCapture(event.pointerId);
+            paintingRef.current = true;
+            const cell = cellFromEvent(event);
+            setHover(cell);
+            const value = valueFor(event);
+            if (value !== null) apply(cell.x, cell.y, value);
+          }}
+          onPointerMove={(event) => {
+            const cell = cellFromEvent(event);
+            setHover(cell);
+            if (!paintingRef.current) return;
+            const value = valueFor(event);
+            if (value !== null) apply(cell.x, cell.y, value);
+          }}
+          onPointerUp={(event) => {
+            paintingRef.current = false;
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+              event.currentTarget.releasePointerCapture(event.pointerId);
+            }
+          }}
+          onPointerLeave={() => {
+            if (!paintingRef.current) setHover(null);
+          }}
+        />
+      </div>
+
+      <p className="mt-2 font-mono text-[11px] text-[#9aa3b5]" role="status">
+        {hover
+          ? `(${hover.x}, ${hover.y}) · ${hoverMask === null ? "비어 있음" : `마스크 ${hoverMask} · 타일 ${hoverIndex}`}`
+          : canSample
+            ? "15-tileset 시트의 칸을 마스크와 1:1로 그립니다."
+            : "시트가 4×4 15-tileset으로 맞으면 타일 이미지를 그립니다. 그 전에는 마스크 색으로 보여 줍니다."}
+      </p>
+    </section>
+  );
+}

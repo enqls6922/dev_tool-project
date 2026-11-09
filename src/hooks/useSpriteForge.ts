@@ -4,12 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { canvasToPngBlob, downloadSpritePack } from "@/lib/exportPack";
 import {
   buildAtlasDocument,
-  isPngFile,
   normalizeSprite,
   packSprites,
   toSpriteName,
   uniqueSpriteNames,
 } from "@/lib/imageProcessor";
+import { formatRasterRejection, partitionRasterFiles } from "@/lib/uploadPolicy";
 import {
   DEFAULT_SETTINGS,
   type AtlasDocument,
@@ -166,6 +166,7 @@ export function useSpriteForge() {
       setProgress("아틀라스 패킹 중…");
       const packed = packSprites(packable, nextSettings.padding, {
         forcePowerOfTwo: nextSettings.forcePowerOfTwo,
+        bleed: nextSettings.bleed,
       });
       const blob = await canvasToPngBlob(packed.canvas);
       if (!alive()) return;
@@ -198,25 +199,16 @@ export function useSpriteForge() {
 
   function addFiles(files: File[]) {
     clearDebounce();
-    const accepted: SpriteRecord[] = [];
-    const rejected: string[] = [];
-    for (const file of files) {
-      if (!isPngFile(file)) {
-        rejected.push(file.name || "unnamed");
-        continue;
-      }
-      accepted.push({
-        id: crypto.randomUUID(),
-        file,
-        status: "queued",
-        spriteName: toSpriteName(file.name),
-      });
-    }
+    const { accepted: filesAccepted, rejected } = partitionRasterFiles(files);
+    const accepted: SpriteRecord[] = filesAccepted.map((file) => ({
+      id: crypto.randomUUID(),
+      file,
+      status: "queued" as const,
+      spriteName: toSpriteName(file.name),
+    }));
 
     if (rejected.length > 0) {
-      const sample = rejected.slice(0, 4).join(", ");
-      const extra = rejected.length > 4 ? ` 외 ${rejected.length - 4}개` : "";
-      setNotice(`PNG가 아니라 건너뛰었습니다: ${sample}${extra}`);
+      setNotice(formatRasterRejection(rejected));
     } else {
       setNotice(null);
     }

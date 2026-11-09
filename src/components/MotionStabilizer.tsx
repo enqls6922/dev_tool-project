@@ -144,8 +144,8 @@ export function MotionStabilizer({ active = true }: Props) {
       ) : null}
 
       <DropZone
-        title="프레임 PNG를 순서대로 떨어뜨리거나 클릭"
-        hint="Walk_01처럼 놓은 순서가 재생 순서입니다. 알파 30 이하 고스트는 발 위치에서 빠집니다."
+        title="프레임 이미지를 순서대로 떨어뜨리거나 클릭"
+        hint="PNG, JPG, WebP. Walk_01처럼 놓은 순서가 재생 순서입니다. 알파 30 이하 고스트는 발 위치에서 빠집니다."
         onFiles={motion.addFiles}
       />
 

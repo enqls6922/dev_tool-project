@@ -110,6 +110,21 @@ export function ControlPanel({ settings, onChange }: Props) {
         onChange={(cleanGhostPixels) => onChange({ ...settings, cleanGhostPixels })}
       />
 
+      <label className="mt-4 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-[#2a3140] bg-[#0d1016] px-3 py-3">
+        <span>
+          <span className="block text-sm font-medium text-[#ece7df]">1px Bleed (타일맵 틈새 방지)</span>
+          <span className="mt-0.5 block text-xs leading-5 text-[#9aa3b5]">
+            각 조각의 가장자리 색을 상하좌우와 네 모서리로 1px Clamp 복제합니다. 스프라이트 사각은 내용만 가리킵니다.
+          </span>
+        </span>
+        <input
+          type="checkbox"
+          checked={settings.bleed}
+          onChange={(event) => onChange({ ...settings, bleed: event.target.checked })}
+          className="size-4 shrink-0 accent-[#e39b4b]"
+        />
+      </label>
+
       <label className="mt-4 block" htmlFor="padding">
         <span className="mb-2 flex items-center justify-between text-xs font-medium tracking-wide text-[#9aa3b5] uppercase">
           패딩

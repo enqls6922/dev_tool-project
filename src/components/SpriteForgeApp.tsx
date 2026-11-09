@@ -2,8 +2,7 @@
 
 import { Anvil, ChevronRight, ShieldCheck } from "lucide-react";
 import { useRef, useState, type KeyboardEvent } from "react";
-import { MotionStabilizer } from "@/components/MotionStabilizer";
-import { PixelCleaner } from "@/components/PixelCleaner";
+import { FrameSequencer } from "@/components/FrameSequencer";
 import { RuleTileForge } from "@/components/RuleTileForge";
 import { SpritePackerPanel } from "@/components/SpritePackerPanel";
 
@@ -12,29 +11,22 @@ const TABS = [
     id: "packer",
     label: "📦 Sprite Packer",
     panel: "panel-packer",
-    steps: ["Drop Sprites", "Trim & Grid", "Export ZIP"],
-    summary: "Turn messy AI pixel art into clean, Unity-ready sprite atlases in seconds.",
+    steps: ["Drop Sprites", "Trim & Bleed", "Export ZIP"],
+    summary: "AI 픽셀을 트림하고, 고스트를 지우고, 필요하면 1px 블리드로 타일맵 틈을 막은 뒤 유니티 아틀라스로 내보냅니다.",
   },
   {
     id: "ruletile",
     label: "🗺️ RuleTile Forge",
     panel: "panel-ruletile",
-    steps: ["Tileset PNG", "Preset", "Export ZIP"],
-    summary: "PixelLab 타일셋을 Unity Rule Tile로 바꿉니다. 8방향 이웃 조건과 에디터 빌더를 같이 담습니다.",
+    steps: ["Tileset", "Paint", "Export ZIP"],
+    summary: "PixelLab 타일셋을 Unity Rule Tile로 바꾸고, 8×8 샌드박스에서 4방향 마스크를 바로 칠해 봅니다.",
   },
   {
-    id: "cleaner",
-    label: "🧹 Pixel Cleaner",
-    panel: "panel-cleaner",
-    steps: ["Drop PNG", "Clean Alpha", "Save PNG"],
-    summary: "반투명 고스트 픽셀을 지우고, 확대 체커보드에서 정리된 경계를 확인합니다.",
-  },
-  {
-    id: "motion",
-    label: "🎬 Motion Stabilizer",
-    panel: "panel-motion",
-    steps: ["Drop Frames", "Stabilize", "Export Sheet"],
-    summary: "걷기 프레임의 발바닥을 한 기준선에 맞추고, 좌우 중심을 고정한 뒤 가로 스트립으로 내보냅니다.",
+    id: "sequencer",
+    label: "🎬 Frame Sequencer",
+    panel: "panel-sequencer",
+    steps: ["Drop Frames", "Sequence", "Export ZIP"],
+    summary: "프레임 순서를 정하고 FPS로 미리 본 뒤, 가로 스트립과 루프 AnimationClip 빌더를 한 ZIP으로 내보냅니다.",
   },
 ] as const;
 
@@ -45,8 +37,7 @@ export function SpriteForgeApp() {
   const tabRefs = useRef<Record<TabId, HTMLButtonElement | null>>({
     packer: null,
     ruletile: null,
-    cleaner: null,
-    motion: null,
+    sequencer: null,
   });
   const active = TABS.find((item) => item.id === tab) ?? TABS[0];
 
@@ -134,11 +125,8 @@ export function SpriteForgeApp() {
         <div role="tabpanel" id="panel-ruletile" aria-labelledby="tab-ruletile" hidden={tab !== "ruletile"}>
           <RuleTileForge />
         </div>
-        <div role="tabpanel" id="panel-cleaner" aria-labelledby="tab-cleaner" hidden={tab !== "cleaner"}>
-          <PixelCleaner />
-        </div>
-        <div role="tabpanel" id="panel-motion" aria-labelledby="tab-motion" hidden={tab !== "motion"}>
-          <MotionStabilizer active={tab === "motion"} />
+        <div role="tabpanel" id="panel-sequencer" aria-labelledby="tab-sequencer" hidden={tab !== "sequencer"}>
+          <FrameSequencer active={tab === "sequencer"} />
         </div>
       </div>
     </div>

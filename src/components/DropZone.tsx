@@ -1,7 +1,7 @@
 "use client";
 
 import { ImagePlus } from "lucide-react";
-import { useId, useState, type DragEvent } from "react";
+import { useEffect, useId, useRef, useState, type DragEvent } from "react";
 
 type Props = {
   onFiles: (files: File[]) => void;
@@ -13,15 +13,36 @@ type Props = {
 export function DropZone({
   onFiles,
   multiple = true,
-  title = "PNG를 떨어뜨리거나 클릭해서 선택",
-  hint = "여러 장을 한 번에 올릴 수 있습니다. 디코딩, 트림, 패킹은 이 브라우저 캔버스에서만 돌아갑니다.",
+  title = "PNG, JPG, WebP를 떨어뜨리거나 클릭해서 선택",
+  hint = "여러 장을 한 번에 올릴 수 있습니다. SVG는 받지 않습니다. 디코딩, 트림, 패킹은 이 브라우저 캔버스에서만 돌아갑니다.",
 }: Props) {
   const inputId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const onFilesRef = useRef(onFiles);
   const [active, setActive] = useState(false);
+
+  useEffect(() => {
+    onFilesRef.current = onFiles;
+  });
+
+  // The browser reports a chosen file with a DOM change event. Listen here so
+  // the upload still runs when React's delegated onChange does not see it.
+  useEffect(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    const onChange = () => {
+      const list = input.files;
+      if (!list || list.length === 0) return;
+      onFilesRef.current(Array.from(list));
+      input.value = "";
+    };
+    input.addEventListener("change", onChange);
+    return () => input.removeEventListener("change", onChange);
+  }, []);
 
   const takeFiles = (list: FileList | null) => {
     if (!list || list.length === 0) return;
-    onFiles(Array.from(list));
+    onFilesRef.current(Array.from(list));
   };
 
   const onDrop = (event: DragEvent<HTMLLabelElement>) => {
@@ -60,15 +81,12 @@ export function DropZone({
       <span className="text-sm font-medium text-[#ece7df]">{title}</span>
       <span className="mt-1 max-w-sm text-xs leading-5 text-[#9aa3b5]">{hint}</span>
       <input
+        ref={inputRef}
         id={inputId}
         type="file"
-        accept="image/png,.png"
+        accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
         multiple={multiple}
         className="sr-only"
-        onChange={(event) => {
-          takeFiles(event.target.files);
-          event.target.value = "";
-        }}
       />
     </label>
   );

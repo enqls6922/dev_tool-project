@@ -2,15 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import { downloadCleanedPng, downloadCleanedZip } from "@/lib/exportCleaned";
-import { uniqueFileNames } from "@/lib/fileNames";
+import { sanitizeDownloadName, uniqueFileNames } from "@/lib/fileNames";
 import { canvasToPngBlob } from "@/lib/exportPack";
 import {
   MAX_IMAGE_EDGE,
   cleanCanvasGhostPixels,
   drawImageToCanvas,
-  isPngFile,
   loadImage,
 } from "@/lib/imageProcessor";
+import { formatRasterRejection, partitionRasterFiles } from "@/lib/uploadPolicy";
 
 export type CleanerItem = {
   id: string;
@@ -52,15 +52,9 @@ export function usePixelCleaner() {
   }, []);
 
   async function addFiles(files: File[]) {
-    const accepted = files.filter((file) => isPngFile(file));
-    const rejected = files.filter((file) => !isPngFile(file));
+    const { accepted, rejected } = partitionRasterFiles(files);
     if (rejected.length > 0) {
-      const sample = rejected
-        .slice(0, 4)
-        .map((file) => file.name || "unnamed")
-        .join(", ");
-      const extra = rejected.length > 4 ? ` 외 ${rejected.length - 4}개` : "";
-      setNotice(`PNG가 아니라 건너뛰었습니다: ${sample}${extra}`);
+      setNotice(formatRasterRejection(rejected));
     } else {
       setNotice(null);
     }
@@ -157,7 +151,7 @@ export function usePixelCleaner() {
 
 async function cleanFile(file: File): Promise<CleanerItem> {
   const id = crypto.randomUUID();
-  const name = file.name || "image.png";
+  const name = sanitizeDownloadName(file.name);
   try {
     const image = await loadImage(file);
     if (image.naturalWidth > MAX_IMAGE_EDGE || image.naturalHeight > MAX_IMAGE_EDGE) {

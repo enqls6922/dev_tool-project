@@ -10,6 +10,7 @@ import {
   isPngFile,
   loadImage,
 } from "@/lib/imageProcessor";
+import { formatRasterRejection, partitionRasterFiles } from "@/lib/uploadPolicy";
 import {
   analyzeSheet,
   type RulePreset,
@@ -76,11 +77,12 @@ export function useRuleTileForge() {
         throw new Error(`한 변이 ${MAX_IMAGE_EDGE}px를 넘습니다.`);
       }
 
+      const rasterize = clean || !isPngFile(source);
       let blob: Blob = source;
       let removed: number | null = null;
-      if (clean) {
+      if (rasterize) {
         const canvas = drawImageToCanvas(image, width, height);
-        removed = cleanCanvasGhostPixels(canvas);
+        if (clean) removed = cleanCanvasGhostPixels(canvas);
         blob = await canvasToPngBlob(canvas);
         if (!mountedRef.current || run !== runRef.current) return;
       }
@@ -113,17 +115,18 @@ export function useRuleTileForge() {
   }
 
   function addFiles(files: File[]) {
-    const pngs = files.filter((item) => isPngFile(item));
-    if (pngs.length === 0) {
-      setNotice("PNG만 올릴 수 있습니다.");
+    const { accepted, rejected } = partitionRasterFiles(files);
+    if (accepted.length === 0) {
+      setNotice(rejected.length > 0 ? formatRasterRejection(rejected) : "PNG, JPG, WebP만 올릴 수 있습니다.");
       return;
     }
-    if (pngs.length > 1 || pngs.length !== files.length) {
-      setNotice("타일셋 PNG 한 장만 사용합니다. 첫 번째 PNG를 골랐습니다.");
+    if (accepted.length > 1 || rejected.length > 0) {
+      setNotice("타일셋 한 장만 사용합니다. 첫 번째 PNG, JPG 또는 WebP를 골랐습니다.");
     } else {
       setNotice(null);
     }
-    const next = pngs[0];
+    const next = accepted[0];
+    if (!next) return;
     fileRef.current = next;
     setFile(next);
     void renderSheet(next, cleanRef.current);
