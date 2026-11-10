@@ -238,7 +238,9 @@ export function RuleTileForge() {
 function layoutFor(data: RuleDataFile | null, preset: RulePreset, fillMode: FillMode): SandboxLayout {
   const active = data?.preset ?? preset;
   if (active === "15-tileset") {
-    return { kind: "fifteen", shape: "3x5" };
+    if (data?.columns === 3) return { kind: "fifteen", shape: "3x5" };
+    if (data && data.columns === 4 && data.rows < 8) return { kind: "fifteen", shape: "4x4" };
+    return { kind: "fifteen", shape: "4x8" };
   }
   if (active === "wang") {
     const tall = data ? data.rows >= 8 : true;
@@ -268,10 +270,14 @@ function ruleOrderSummary(data: RuleDataFile): string {
   if (data.preset === "godot-47" && data.columns === 12 && data.rows >= 8) {
     return data.fillMode === "wall"
       ? "벽 모드: 0–95 고정 룰, 내부 tile_41, 남쪽 테두리 아래에 기둥"
-      : "바닥 모드: 내부 tile_34, 직선 테두리 tile_33·47·22·58, 북쪽 위 tile_85·86·87";
+      : "바닥 모드: 내부 tile_34, 직선 테두리 tile_32·11·05·02, 북쪽 위 tile_85·86·87";
   }
   if (data.preset === "15-tileset") {
-    return "PixelLab 15-tileset (3×5 시트): 외곽 코너, 직선 테두리, 내부 tile_07 순";
+    if (data.columns === 4 && data.rows >= 8) {
+      return "PixelLab 15-tileset (4×8): 외곽 tile_08·10·16·27, 직선 tile_09·17·12·23, 안쪽 tile_05·06·18·22, 내부 tile_13";
+    }
+    if (data.columns === 4) return "PixelLab 15-tileset (4×4): 네이티브 16마스크, 빈 칸은 tile_12";
+    return "PixelLab 15-tileset (3×5): 외곽 코너, 직선 테두리, 내부 tile_07 순";
   }
   return "조건이 많은 룰부터 검사";
 }
