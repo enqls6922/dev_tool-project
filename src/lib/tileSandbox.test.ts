@@ -16,6 +16,8 @@ import {
   cellsTouchedByEdit,
   emptySandbox,
   paintCell,
+  sandboxPillarOverlayIndex,
+  sandboxPillarOverlayRect,
   sandboxSourceRect,
   sandboxTileIndex,
 } from "./tileSandbox.ts";
@@ -118,18 +120,40 @@ test("a 5x8 Wang rectangle fills tile_16 and keeps the fixed border", () => {
     }
   }
 
+  const block = cells;
   cells = paintCell(cells, 4, 2, 0);
   assert.equal(sandboxTileIndex(cells, 3, 3, 8, layout), WANG_5X8_INDEX.innerNE);
   assert.equal(sandboxTileIndex(cells, 4, 3, 8, layout), WANG_5X8_INDEX.north);
+  assert.equal(sandboxPillarOverlayIndex(cells, 4, 2, 8, layout), 6);
+  assert.equal(sandboxPillarOverlayIndex(block, 4, 2, 8, layout), null);
 
   const alone = sandboxSourceRect(fillRect(emptySandbox(), 1, 1, 1, 1), 1, 1, 32, 8, layout);
   assert.ok(alone);
   assert.equal(alone.index, WANG_5X8_INDEX.single);
-  assert.equal(alone.index, 6);
+  assert.equal(alone.index, 13);
   assert.equal(alone.width, 32);
   assert.equal(alone.height, 32);
   assert.notEqual(alone.index, 0);
   assert.notEqual(alone.index, 16);
+
+  assert.equal(sandboxPillarOverlayIndex(block, 2, 1, 8, layout), 5);
+  assert.equal(sandboxPillarOverlayIndex(block, 3, 1, 8, layout), 6);
+  assert.equal(sandboxPillarOverlayIndex(block, 4, 1, 8, layout), 6);
+  assert.equal(sandboxPillarOverlayIndex(block, 5, 1, 8, layout), 7);
+  assert.equal(sandboxPillarOverlayIndex(block, 3, 2, 8, layout), null);
+  assert.equal(sandboxPillarOverlayIndex(block, 3, 0, 8, layout), null);
+  const pillar = sandboxPillarOverlayRect(block, 3, 1, 32, 8, layout);
+  assert.deepEqual(pillar, { index: 6, x: 32, y: 32, width: 32, height: 32 });
+  const leftPillar = sandboxPillarOverlayRect(block, 2, 1, 32, 8, layout);
+  assert.deepEqual(leftPillar, { index: 5, x: 0, y: 32, width: 32, height: 32 });
+  const rightPillar = sandboxPillarOverlayRect(block, 5, 1, 32, 8, layout);
+  assert.deepEqual(rightPillar, { index: 7, x: 64, y: 32, width: 32, height: 32 });
+
+  const column = fillRect(emptySandbox(), 3, 2, 3, 4);
+  assert.equal(sandboxTileIndex(column, 3, 2, 8, layout), 3);
+  assert.equal(sandboxTileIndex(column, 3, 3, 8, layout), 8);
+  assert.equal(sandboxTileIndex(column, 3, 4, 8, layout), 13);
+  assert.equal(sandboxPillarOverlayIndex(column, 3, 1, 8, layout), null);
 });
 
 test("a Godot sandbox cell samples the 47-blob template", () => {
