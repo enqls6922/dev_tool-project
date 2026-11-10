@@ -238,7 +238,7 @@ export function RuleTileForge() {
 function layoutFor(data: RuleDataFile | null, preset: RulePreset, fillMode: FillMode): SandboxLayout {
   const active = data?.preset ?? preset;
   if (active === "15-tileset") {
-    return { kind: "fifteen", shape: data?.columns === 4 ? "4x4" : "3x5" };
+    return { kind: "fifteen", shape: "3x5" };
   }
   if (active === "wang") {
     const tall = data ? data.rows >= 8 : true;
@@ -268,7 +268,10 @@ function ruleOrderSummary(data: RuleDataFile): string {
   if (data.preset === "godot-47" && data.columns === 12 && data.rows >= 8) {
     return data.fillMode === "wall"
       ? "벽 모드: 0–95 고정 룰, 내부 tile_41, 남쪽 테두리 아래에 기둥"
-      : "바닥 모드: 내부 tile_34, 직선 테두리 tile_32·27·05·89, 북쪽 위 tile_85·86·87";
+      : "바닥 모드: 내부 tile_34, 직선 테두리 tile_33·47·22·58, 북쪽 위 tile_85·86·87";
+  }
+  if (data.preset === "15-tileset") {
+    return "PixelLab 15-tileset (3×5 시트): 외곽 코너, 직선 테두리, 내부 tile_07 순";
   }
   return "조건이 많은 룰부터 검사";
 }
