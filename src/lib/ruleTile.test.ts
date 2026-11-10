@@ -627,11 +627,14 @@ test("the unity builder slices, binds m_TilingRules, and adds both menus", () =>
   assert.match(script, /case "floor": return 34;/);
   assert.match(script, /case "floor": return 41;/);
   assert.match(script, /case "floor": return 26;/);
-  assert.match(script, /case "outer_nw": return 61;/);
-  assert.match(script, /case "east": return 39;/);
+  assert.match(script, /case "north_cap_w": return 49;/);
+  assert.match(script, /case "north_w": return 61;/);
+  assert.match(script, /case "east": return 51;/);
   assert.match(script, /case "south": return 86;/);
   assert.match(script, /case "north": return 62;/);
   assert.match(script, /case "west": return 36;/);
+  assert.match(script, /entry.neighbors.Up2/);
+  assert.match(script, /entry.neighbors.Down2/);
   assert.match(script, /case "inner_nw": return 73;/);
   assert.match(script, /case "pillar_top": return 15;/);
   assert.match(script, /case "pillar_mid": return 27;/);
@@ -676,7 +679,7 @@ test("aspect ratio picks the PixelLab preset and leaves a valid choice alone", (
   assert.equal(suggestPreset(96, 160, 32, "godot-47"), "15-tileset");
   assert.equal(suggestPreset(768, 256, 32, "wang"), "godot-47");
   assert.equal(suggestPreset(160, 128, 32, "wang"), "wang");
-  assert.equal(DIRECTION_KEYS.length, 8);
+  assert.equal(DIRECTION_KEYS.length, 11);
 });
 
 test("Wang 5x8 wall mode inverts the floor border onto the dark fill", () => {
@@ -752,43 +755,40 @@ test("Godot 12x8 uses every index and both fill modes", () => {
   assert.equal(floorData.defaultSpriteIndex, 34);
   assert.equal(floorData.cells[34]?.label, "내부 바닥");
   assert.equal(floorData.cells[34]?.sprite, "tile_34");
-  assert.equal(floorData.cells[72]?.label, "고립 단독");
+  assert.equal(floorData.cells[72]?.role, "unmapped");
   assert.equal(floorData.cells[95]?.role, "unmapped");
   assert.equal(floorData.cells[95]?.label, "미사용");
   assert.equal(floorData.rules.some((rule) => rule.index > 47), true);
   assert.equal(floorData.rules.some((rule) => rule.index === GODOT_FLOOR_INDEX.outerNW), true);
-  assert.equal(floorData.rules.findIndex((rule) => rule.name === "outer_nw")
+  assert.equal(floorData.rules.findIndex((rule) => rule.name === "north_cap")
+    < floorData.rules.findIndex((rule) => rule.name === "north"), true);
+  assert.equal(floorData.rules.findIndex((rule) => rule.name === "south_cap")
     < floorData.rules.findIndex((rule) => rule.name === "north"), true);
   const byName = Object.fromEntries(floorData.rules.map((rule) => [rule.name, rule]));
-  assert.equal(byName.corridor_h?.index, 2);
-  assert.equal(byName.corridor_h_left?.index, 1);
-  assert.equal(byName.corridor_h_right?.index, 3);
-  assert.equal(byName.corridor_v?.index, 24);
-  assert.equal(byName.corridor_v_top?.index, 12);
-  assert.equal(byName.corridor_v_bottom?.index, 48);
-  assert.equal(byName.outer_nw?.index, 61);
-  assert.equal(byName.outer_ne?.index, 63);
-  assert.equal(byName.outer_sw?.index, 85);
-  assert.equal(byName.outer_se?.index, 87);
+  assert.equal(byName.north_cap_w?.index, 49);
+  assert.equal(byName.north_cap?.index, 50);
+  assert.equal(byName.north_cap_e?.index, 51);
+  assert.equal(byName.north_w?.index, 61);
   assert.equal(byName.north?.index, 62);
+  assert.equal(byName.north_e?.index, 63);
+  assert.equal(byName.north_base_w?.index, 73);
+  assert.equal(byName.north_base?.index, 74);
+  assert.equal(byName.north_base_e?.index, 75);
+  assert.equal(byName.south_cap?.index, 74);
+  assert.equal(byName.south_w?.index, 85);
   assert.equal(byName.south?.index, 86);
+  assert.equal(byName.south_e?.index, 87);
   assert.equal(byName.west?.index, 36);
-  assert.equal(byName.east?.index, 39);
+  assert.equal(byName.east?.index, 51);
   assert.notEqual(byName.west?.index, 32);
+  assert.notEqual(byName.east?.index, 39);
   assert.notEqual(byName.east?.index, 23);
   assert.notEqual(byName.south?.index, 89);
-  assert.notEqual(byName.east?.index, 11);
-  assert.notEqual(byName.east?.index, 3);
-  assert.notEqual(byName.east?.index, 27);
-  assert.notEqual(byName.east?.index, 35);
-  assert.notEqual(byName.east?.index, 47);
-  assert.equal(byName.inner_nw?.index, 44);
-  assert.equal(byName.inner_ne?.index, 47);
-  assert.equal(byName.inner_sw?.index, 20);
-  assert.equal(byName.inner_se?.index, 23);
-  assert.equal(floorData.rules.some((rule) => [27, 35, 49, 50, 51, 73, 74, 75].includes(rule.index)), false);
+  assert.equal(byName.inner_nw, undefined);
   assert.equal(byName.north?.neighbors.Left, 1);
   assert.equal(byName.north?.neighbors.Right, 1);
+  assert.equal(byName.north?.neighbors.Up2, 2);
+  assert.equal(byName.south_cap?.neighbors.Down2, 2);
 
   const surrounded = {
     Top: 1, Bottom: 1, Left: 1, Right: 1, TopLeft: 1, TopRight: 1, BottomLeft: 1, BottomRight: 1,
@@ -798,11 +798,11 @@ test("Godot 12x8 uses every index and both fill modes", () => {
   const alone = {
     Top: 2, Bottom: 2, Left: 2, Right: 2, TopLeft: 2, TopRight: 2, BottomLeft: 2, BottomRight: 2,
   } satisfies Neighbors;
-  assert.equal(godotFixedResolve(alone, "floor").index, 72);
+  assert.equal(godotFixedResolve(alone, "floor").index, 86);
   const north = {
     Top: 2, Bottom: 1, Left: 1, Right: 1, TopLeft: 2, TopRight: 2, BottomLeft: 1, BottomRight: 1,
   } satisfies Neighbors;
-  assert.equal(godotFixedResolve(north, "floor").index, 62);
+  assert.equal(godotFixedResolve(north, "floor").index, 50);
 
   const wall = analyzeSheet({ width: 384, height: 256, tileSize: 32, preset: "godot-47", fillMode: "wall" });
   assert.equal(wall.warning, null);

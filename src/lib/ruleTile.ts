@@ -35,6 +35,12 @@ export type Neighbors = {
   TopRight: NeighborValue;
   BottomLeft: NeighborValue;
   BottomRight: NeighborValue;
+  /** Two cells above. Godot floor walls use this to tell the second row from the interior. */
+  Up2?: NeighborValue;
+  /** Three cells above. The third row of a Godot north wall. */
+  Up3?: NeighborValue;
+  /** Two cells below. The row above a Godot south pillar. */
+  Down2?: NeighborValue;
 };
 
 export const DIRECTION_KEYS = [
@@ -46,6 +52,9 @@ export const DIRECTION_KEYS = [
   "TopRight",
   "BottomLeft",
   "BottomRight",
+  "Up2",
+  "Up3",
+  "Down2",
 ] as const satisfies readonly (keyof Neighbors)[];
 
 export type PresetInfo = {
@@ -382,14 +391,11 @@ export const GODOT_FULL_MASK = 255;
 /**
  * PixelLab Godot 12×8 floor mode. Painted = 1, empty = 2.
  * The bright room sits on tile_34 (row 2, column 10).
- * Blue rune borders, from the 12×8 preview:
- * west tile_36, east tile_39, north tile_62, south tile_86.
- * tile_34 is the bright square floor. The front wall is tile_61, tile_62, tile_63.
- * The south lip is tile_85, tile_86, tile_87. tile_32 and tile_23 are wide dark
- * cobble, so they are not the side walls. tile_36 and tile_39 keep a bright
- * floor with a blue rune only on the outer edge.
- * tile_89 is a black fence, so it is not a floor edge. tile_47 is a black hole
- * and tile_27 is a lip, so neither is the east wall.
+ * The north wall is three rows: header tile_49 tile_50 tile_51, body tile_61
+ * tile_62 tile_63, base tile_73 tile_74 tile_75. The south pillar is tile_85
+ * tile_86 tile_87, and the row above it is the same base triple. West is
+ * tile_36. East is tile_51, the straight rune opposite tile_36. tile_39 mixes
+ * in a black pillar, so it is not the east wall. Deep cells are tile_34.
  */
 export const GODOT_FLOOR_INDEX = {
   floor: 34,
@@ -400,14 +406,14 @@ export const GODOT_FLOOR_INDEX = {
   corridorV: 24,
   corridorVTop: 12,
   corridorVBottom: 48,
-  outerNW: 61,
-  outerNE: 63,
+  outerNW: 49,
+  outerNE: 51,
   outerSW: 85,
   outerSE: 87,
   north: 62,
   south: 86,
   west: 36,
-  east: 39,
+  east: 51,
   innerNW: 44,
   innerNE: 47,
   innerSW: 20,
@@ -749,10 +755,13 @@ export function countCondition(neighbors: Neighbors, value: NeighborValue): numb
 
 export function ruleMatches(expected: Neighbors, actual: Neighbors): boolean {
   for (const key of DIRECTION_KEYS) {
-    const condition = expected[key];
+    const condition = expected[key] ?? 0;
     if (condition === 0) continue;
-    if (condition === 1 && actual[key] !== 1) return false;
-    if (condition === 2 && actual[key] === 1) return false;
+    const seen = actual[key];
+    if (condition === 1 && seen !== 1) return false;
+    // 0 still counts as NotThis for the original eight neighbours. A missing far
+    // neighbour does not, so a deep floor is not mistaken for a wall cap.
+    if (condition === 2 && seen !== 2 && seen !== 0) return false;
   }
   return true;
 }
@@ -1129,62 +1138,45 @@ function cardinals(patch: Partial<Neighbors>): Neighbors {
 }
 
 /**
- * 12×8 floor rules. Check order is the first match:
- * isolated tile, 1-wide corridors, outer corners, straight edges, one inner gap, floor.
+ * Left, middle, and right of one horizontal band, plus the 1-cell-wide middle.
+ * Earlier bands win. The south pillar is first so its cap is never a cut body.
+ */
+function godotBand(
+  name: string,
+  label: string,
+  tiles: readonly [number, number, number],
+  extra: Partial<Neighbors>,
+): Slot[] {
+  const [left, middle, right] = tiles;
+  return [
+    wangFixedSlot(left, `${name}_w`, `${label} 좌`, 6, cardinals({ ...extra, Left: 2, Right: 1 })),
+    wangFixedSlot(right, `${name}_e`, `${label} 우`, 12, cardinals({ ...extra, Left: 1, Right: 2 })),
+    wangFixedSlot(middle, name, label, 14, cardinals({ ...extra, Left: 1, Right: 1 })),
+    wangFixedSlot(middle, `${name}_n`, `${label} 단독`, 5, cardinals({ ...extra, Left: 2, Right: 2 })),
+  ];
+}
+
+/**
+ * 12×8 floor rules. Check order is the distance from the north and south edges:
+ * south pillar, the cap above it, then the three north rows, then the side
+ * walls, then the bright floor. Unity reads Up2, Up3, and Down2 as well as
+ * the eight neighbours.
  */
 function godotFloorSlots(): Slot[] {
   const index = GODOT_FLOOR_INDEX;
   const floor = neighborsFromCornerMask(15);
   return [
-    wangFixedSlot(index.single, "single", "고립 단독", 0, cardinals({
-      Top: 2, Bottom: 2, Left: 2, Right: 2,
-    })),
-    wangFixedSlot(index.corridorH, "corridor_h", "가로 1칸 폭 통로", 10, cardinals({
-      Left: 1, Right: 1, Top: 2, Bottom: 2,
-    })),
-    wangFixedSlot(index.corridorHLeft, "corridor_h_left", "가로 통로 좌끝", 8, cardinals({
-      Left: 2, Right: 1, Top: 2, Bottom: 2,
-    })),
-    wangFixedSlot(index.corridorHRight, "corridor_h_right", "가로 통로 우끝", 2, cardinals({
-      Left: 1, Right: 2, Top: 2, Bottom: 2,
-    })),
-    wangFixedSlot(index.corridorV, "corridor_v", "세로 1칸 폭 통로", 5, cardinals({
-      Top: 1, Bottom: 1, Left: 2, Right: 2,
-    })),
-    wangFixedSlot(index.corridorVTop, "corridor_v_top", "세로 통로 상단", 4, cardinals({
-      Top: 2, Bottom: 1, Left: 2, Right: 2,
-    })),
-    wangFixedSlot(index.corridorVBottom, "corridor_v_bottom", "세로 통로 하단", 1, cardinals({
-      Top: 1, Bottom: 2, Left: 2, Right: 2,
-    })),
-    wangFixedSlot(index.outerNW, "outer_nw", "북서 외곽 코너", 6, cardinals({
-      Top: 2, Left: 2, Right: 1, Bottom: 1,
-    })),
-    wangFixedSlot(index.outerNE, "outer_ne", "북동 외곽 코너", 12, cardinals({
-      Top: 2, Right: 2, Left: 1, Bottom: 1,
-    })),
-    wangFixedSlot(index.outerSW, "outer_sw", "남서 외곽 코너", 3, cardinals({
-      Bottom: 2, Left: 2, Right: 1, Top: 1,
-    })),
-    wangFixedSlot(index.outerSE, "outer_se", "남동 외곽 코너", 9, cardinals({
-      Bottom: 2, Right: 2, Left: 1, Top: 1,
-    })),
-    wangFixedSlot(index.north, "north", "북쪽 상단 테두리", 14, cardinals({
-      Top: 2, Bottom: 1, Left: 1, Right: 1,
-    })),
-    wangFixedSlot(index.south, "south", "남쪽 하단 테두리", 11, cardinals({
-      Bottom: 2, Top: 1, Left: 1, Right: 1,
-    })),
+    ...godotBand("south", "남쪽 기둥", [85, 86, 87], { Bottom: 2 }),
+    ...godotBand("south_cap", "남쪽 마감", [73, 74, 75], { Bottom: 1, Down2: 2 }),
+    ...godotBand("north_cap", "북쪽 마감", [49, 50, 51], { Top: 2, Bottom: 1 }),
+    ...godotBand("north", "북쪽 몸통", [61, 62, 63], { Top: 1, Up2: 2, Bottom: 1 }),
+    ...godotBand("north_base", "북쪽 밑단", [73, 74, 75], { Top: 1, Up2: 1, Up3: 2, Bottom: 1 }),
     wangFixedSlot(index.west, "west", "서쪽 좌측 테두리", 7, cardinals({
       Left: 2, Right: 1, Top: 1, Bottom: 1,
     })),
     wangFixedSlot(index.east, "east", "동쪽 우측 테두리", 13, cardinals({
       Right: 2, Left: 1, Top: 1, Bottom: 1,
     })),
-    wangFixedSlot(index.innerNW, "inner_nw", "북서 안쪽 코너", 15, wangInner("TopLeft")),
-    wangFixedSlot(index.innerNE, "inner_ne", "북동 안쪽 코너", 15, wangInner("TopRight")),
-    wangFixedSlot(index.innerSW, "inner_sw", "남서 안쪽 코너", 15, wangInner("BottomLeft")),
-    wangFixedSlot(index.innerSE, "inner_se", "남동 안쪽 코너", 15, wangInner("BottomRight")),
     wangFixedSlot(index.floor, "floor", "내부 바닥", 15, floor, true),
   ];
 }
@@ -1604,12 +1596,17 @@ export function buildRuleTileScript(): string {
 //   floor interior                  tile_34
 //   floor single                    tile_72
 //   floor corridors                 tile_02 tile_01 tile_03 tile_24 tile_12 tile_48
-//   floor outer NW/NE/SW/SE         tile_61 tile_63 tile_85 tile_87
-//   floor north/south/west/east     tile_62 tile_86 tile_36 tile_39
-//   floor inner NW/NE/SW/SE         tile_44 tile_47 tile_20 tile_23
-//   floor north-wall overlay        off (tile_85 tile_86 tile_87 are the south lip)
-//   tile_32 and tile_23 are wide dark cobble, not the side walls. tile_89 is a
-//   black fence and is not a floor edge.
+//   floor north rows, left/mid/right
+//     header tile_49 tile_50 tile_51
+//     body   tile_61 tile_62 tile_63
+//     base   tile_73 tile_74 tile_75
+//   floor south cap above the pillar  tile_73 tile_74 tile_75
+//   floor south pillar                 tile_85 tile_86 tile_87
+//   floor west/east                    tile_36 tile_51
+//   floor interior                     tile_34
+//   Up2, Up3, and Down2 are neighbours two and three cells away.
+//   tile_39 mixes a black pillar into the east edge, so floor mode does not use it.
+//   tile_89 is a black fence and is not a floor edge.
 //   tile_47 is a black hole and tile_27 is a lip. Floor mode does not use either
 //   as the east wall. tile_58 and tile_22 are dark cobble, not the room lip.
 //   wall interior                   tile_41
@@ -1942,18 +1939,30 @@ public static class RuleTileBuilder
             case "corridor_v": return 24;
             case "corridor_v_top": return 12;
             case "corridor_v_bottom": return 48;
-            case "outer_nw": return 61;
-            case "outer_ne": return 63;
+            case "north_cap_w": return 49;
+            case "north_cap_e": return 51;
+            case "north_cap": return 50;
+            case "north_cap_n": return 50;
+            case "north_w": return 61;
+            case "north_e": return 63;
+            case "north": return 62;
+            case "north_n": return 62;
+            case "north_base_w": return 73;
+            case "north_base_e": return 75;
+            case "north_base": return 74;
+            case "north_base_n": return 74;
+            case "south_cap_w": return 73;
+            case "south_cap_e": return 75;
+            case "south_cap": return 74;
+            case "south_cap_n": return 74;
+            case "south_w": return 85;
+            case "south_e": return 87;
+            case "south": return 86;
+            case "south_n": return 86;
+            case "west": return 36;
+            case "east": return 51;
             case "outer_sw": return 85;
             case "outer_se": return 87;
-            case "north": return 62;
-            case "south": return 86;
-            case "west": return 36;
-            case "east": return 39;
-            case "inner_nw": return 44;
-            case "inner_ne": return 47;
-            case "inner_sw": return 20;
-            case "inner_se": return 23;
             default: return -1;
         }
     }
@@ -2002,6 +2011,9 @@ public static class RuleTileBuilder
             AddNeighbor(rule, new Vector3Int(-1, -1, 0), entry.neighbors.BottomLeft);
             AddNeighbor(rule, new Vector3Int(0, -1, 0), entry.neighbors.Bottom);
             AddNeighbor(rule, new Vector3Int(1, -1, 0), entry.neighbors.BottomRight);
+            AddNeighbor(rule, new Vector3Int(0, 2, 0), entry.neighbors.Up2);
+            AddNeighbor(rule, new Vector3Int(0, 3, 0), entry.neighbors.Up3);
+            AddNeighbor(rule, new Vector3Int(0, -2, 0), entry.neighbors.Down2);
             ruleTile.m_TilingRules.Add(rule);
         }
 
@@ -2064,6 +2076,9 @@ public class SpriteForgeNeighbors
     public int TopRight;
     public int BottomLeft;
     public int BottomRight;
+    public int Up2;
+    public int Up3;
+    public int Down2;
 }
 #endif
 `;
