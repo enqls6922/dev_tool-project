@@ -270,11 +270,11 @@ function ruleOrderSummary(data: RuleDataFile): string {
   if (data.preset === "godot-47" && data.columns === 12 && data.rows >= 8) {
     return data.fillMode === "wall"
       ? "벽 모드: 0–95 고정 룰, 내부 tile_41, 남쪽 테두리 아래에 기둥"
-      : "바닥 모드: 내부 tile_34, 서·동 tile_32·23, 북·남 tile_62·86, 외곽 tile_61·63·85·87";
+      : "바닥 모드: 내부 tile_34, 서·동 tile_36·39, 북·남 tile_62·86, 외곽 tile_61·63·85·87";
   }
   if (data.preset === "15-tileset") {
     if (data.columns === 4 && data.rows >= 8) {
-      return "PixelLab 15-tileset (4×8): 내부 tile_14, 북쪽 칸 tile_10, 서 tile_12, 동 tile_01, 남 tile_17, 남서 tile_16. 북쪽 빈칸은 tile_06·03·07";
+      return "PixelLab 15-tileset (4×8): 내부 tile_14, 맨 윗줄 tile_12·13·19, 서 tile_04, 동 tile_23, 남 tile_17, 남서 tile_16, 남동 tile_27. 위 빈칸은 tile_06·07·03";
     }
     if (data.columns === 4) return "PixelLab 15-tileset (4×4): 네이티브 16마스크, 빈 칸은 tile_12";
     return "PixelLab 15-tileset (3×5): 외곽 코너, 직선 테두리, 내부 tile_07 순";

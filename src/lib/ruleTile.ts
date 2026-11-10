@@ -62,7 +62,7 @@ export const PRESET_INFO: Record<RulePreset, PresetInfo> = {
     label: "PixelLab 15-tileset (4×8)",
     columns: 4,
     rows: 8,
-    hint: "128×256(32px) 시트는 가로 4열·세로 8행, 총 32칸(tile_00–tile_31)입니다. 칠한 칸의 내부는 tile_14, 북쪽 가장자리는 tile_10입니다. 서쪽은 tile_12, 동쪽은 tile_01, 남쪽은 tile_17, 남서는 tile_16입니다. 북쪽 빈칸에는 tile_06·03·07 정면 벽을 올립니다. 3×5와 4×4 시트도 같은 프리셋으로 읽습니다.",
+    hint: "128×256(32px) 시트는 가로 4열·세로 8행, 총 32칸(tile_00–tile_31)입니다. 내부는 tile_14, 서쪽은 tile_04, 동쪽은 tile_23, 남쪽은 tile_17, 남서는 tile_16, 남동은 tile_27입니다. 맨 윗줄은 tile_12·13·19이고, 그 위 빈칸에는 tile_06·07·03 기둥 몸통이 올라갑니다. 3×5와 4×4 시트도 같은 프리셋으로 읽습니다.",
   },
   "godot-47": {
     id: "godot-47",
@@ -122,22 +122,22 @@ export const FIFTEEN_INDEX = {
 
 /**
  * PixelLab 15-tileset packed as 4 columns × 8 rows (128×256 at 32px, indices 0–31).
- * Bright squares tile_10 and tile_14 are the low floor. Painted cells stay on
- * those floors. tile_18 is a corner fragment and is never a straight edge.
- * West tile_12, east tile_01, south and southeast tile_17, southwest tile_16.
- * The empty cell above the north lip draws the front wall: tile_06, tile_03, tile_07.
+ * Interior tile_14. West tile_04 has no pillar shadow. East tile_23, south tile_17,
+ * southwest tile_16, southeast tile_27. The painted north row is the wall itself:
+ * tile_12, tile_13, tile_19. tile_12 is not the west edge. When the cell above
+ * that row is empty, the pillar shaft is tile_06, tile_07, tile_03.
  */
 export const FIFTEEN_4X8_INDEX = {
   floor: 14,
   defaultSprite: 14,
-  north: 10,
+  north: 13,
   south: 17,
-  west: 12,
-  east: 1,
+  west: 4,
+  east: 23,
   outerNW: 12,
-  outerNE: 1,
+  outerNE: 19,
   outerSW: 16,
-  outerSE: 17,
+  outerSE: 27,
   single: 14,
 } as const;
 
@@ -383,13 +383,13 @@ export const GODOT_FULL_MASK = 255;
  * PixelLab Godot 12×8 floor mode. Painted = 1, empty = 2.
  * The bright room sits on tile_34 (row 2, column 10).
  * Blue rune borders, from the 12×8 preview:
- * west tile_32, east tile_23, north tile_62, south tile_86.
- * tile_34 is the bright square floor. tile_58 and tile_22 are dark cobble with no
- * blue rune, so they are not the room lip. The front wall is tile_61, tile_62,
- * tile_63. The south lip is tile_85, tile_86, tile_87.
- * tile_39 is a black pillar column and tile_89 is a black fence, so neither is a
- * floor edge. tile_47 is a black hole and tile_27 is a lip, so none of those is
- * the east wall.
+ * west tile_36, east tile_39, north tile_62, south tile_86.
+ * tile_34 is the bright square floor. The front wall is tile_61, tile_62, tile_63.
+ * The south lip is tile_85, tile_86, tile_87. tile_32 and tile_23 are wide dark
+ * cobble, so they are not the side walls. tile_36 and tile_39 keep a bright
+ * floor with a blue rune only on the outer edge.
+ * tile_89 is a black fence, so it is not a floor edge. tile_47 is a black hole
+ * and tile_27 is a lip, so neither is the east wall.
  */
 export const GODOT_FLOOR_INDEX = {
   floor: 34,
@@ -406,8 +406,8 @@ export const GODOT_FLOOR_INDEX = {
   outerSE: 87,
   north: 62,
   south: 86,
-  west: 32,
-  east: 23,
+  west: 36,
+  east: 39,
   innerNW: 44,
   innerNE: 47,
   innerSW: 20,
@@ -452,13 +452,13 @@ export const WANG_FLOOR_OVERLAYS: readonly SpriteOverlay[] = [
 export const GODOT_FLOOR_OVERLAYS: readonly SpriteOverlay[] = [];
 
 /**
- * Front wall drawn on the empty cell above a 4×8 north lip.
- * West corner tile_12 → tile_06, straight floor tile_10 → tile_03, east corner tile_01 → tile_07.
+ * Pillar shaft on the empty cell above the painted 4×8 north row.
+ * tile_12 → tile_06, tile_13 → tile_07, tile_19 → tile_03.
  */
 export const FIFTEEN_4X8_OVERLAYS: readonly SpriteOverlay[] = [
   { source: 12, tile: 6, dy: -1 },
-  { source: 10, tile: 3, dy: -1 },
-  { source: 1, tile: 7, dy: -1 },
+  { source: 13, tile: 7, dy: -1 },
+  { source: 19, tile: 3, dy: -1 },
 ];
 
 /** Pillar feet drawn on the empty cell below a wall-mode south lip. */
@@ -1324,8 +1324,9 @@ function guardWang5x8Sprite(
 
 /**
  * First matching 15-tileset sprite.
- * 4×8 and 3×5 keep their fixed tables. A 3×5 miss, and any pillar index, uses tile_07.
- * A 4×8 miss uses tile_14. A 4×4 miss uses the native empty cell.
+ * 4×8 and 3×5 keep their fixed tables. A 3×5 miss, and a 3×5 pillar index, uses tile_07.
+ * A 4×8 miss uses tile_14. tile_13 is the 4×8 north lip, not a rejected pillar.
+ * A 4×4 miss uses the native empty cell.
  */
 export function fifteenFixedResolve(actual: Neighbors, shape: FifteenShape = "3x5"): { index: number; mask: number } {
   if (shape === "4x4") {
@@ -1570,10 +1571,10 @@ export function buildRuleTileScript(): string {
 // A 4x8 sheet is 4 columns by 8 rows (indices 0-31), the 128x256 PixelLab file.
 // A 3x5 sheet is 3 columns by 5 rows (indices 0-14). A 4x4 sheet uses the native 16 masks.
 //   4x8 interior / default / single tile_14
-//   4x8 north lip stays bright      tile_10 (tile_18 is never a straight edge)
-//   4x8 south / west / east         tile_17, tile_12, tile_01
-//   4x8 outer NW / NE / SW / SE     tile_12, tile_01, tile_16, tile_17
-//   4x8 north-wall overlay          tile_06 tile_03 tile_07 above tile_12 tile_10 tile_01
+//   4x8 north row on the painted cells  tile_12, tile_13, tile_19
+//   4x8 south / west / east         tile_17, tile_04, tile_23
+//   4x8 outer NW / NE / SW / SE     tile_12, tile_19, tile_16, tile_27
+//   4x8 pillar shaft above north    tile_06 tile_07 tile_03 above tile_12 tile_13 tile_19
 //   3x5 interior / default          tile_07
 //   3x5 north / south / west / east tile_04, tile_10, tile_06, tile_08
 //   3x5 outer NW / NE / SW / SE     tile_00, tile_01, tile_09, tile_11
@@ -1604,11 +1605,11 @@ export function buildRuleTileScript(): string {
 //   floor single                    tile_72
 //   floor corridors                 tile_02 tile_01 tile_03 tile_24 tile_12 tile_48
 //   floor outer NW/NE/SW/SE         tile_61 tile_63 tile_85 tile_87
-//   floor north/south/west/east     tile_62 tile_86 tile_32 tile_23
+//   floor north/south/west/east     tile_62 tile_86 tile_36 tile_39
 //   floor inner NW/NE/SW/SE         tile_44 tile_47 tile_20 tile_23
 //   floor north-wall overlay        off (tile_85 tile_86 tile_87 are the south lip)
-//   tile_39 is a black pillar and tile_89 is a black fence. Floor mode does not
-//   use them as the east or south wall.
+//   tile_32 and tile_23 are wide dark cobble, not the side walls. tile_89 is a
+//   black fence and is not a floor edge.
 //   tile_47 is a black hole and tile_27 is a lip. Floor mode does not use either
 //   as the east wall. tile_58 and tile_22 are dark cobble, not the room lip.
 //   wall interior                   tile_41
@@ -1947,8 +1948,8 @@ public static class RuleTileBuilder
             case "outer_se": return 87;
             case "north": return 62;
             case "south": return 86;
-            case "west": return 32;
-            case "east": return 23;
+            case "west": return 36;
+            case "east": return 39;
             case "inner_nw": return 44;
             case "inner_ne": return 47;
             case "inner_sw": return 20;

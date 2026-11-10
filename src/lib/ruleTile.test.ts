@@ -108,24 +108,26 @@ test("a 4x4 sheet and a 4x8 sheet both pass the 15-tileset preset", () => {
   assert.equal(data.cells[14]?.label, "내부 바닥");
   assert.equal(data.cells[14]?.sprite, "tile_14");
   assert.equal(data.cells[6]?.role, "unmapped");
-  assert.equal(data.cells[13]?.role, "unmapped");
+  assert.equal(data.cells[13]?.role, "rule");
+  assert.equal(data.cells[13]?.sprite, "tile_13");
   const byName = Object.fromEntries(data.rules.map((rule) => [rule.name, rule]));
   assert.equal(byName.floor?.index, 14);
   assert.equal(byName.single?.index, 14);
-  assert.equal(byName.north?.index, 10);
+  assert.equal(byName.north?.index, 13);
   assert.equal(byName.south?.index, 17);
-  assert.equal(byName.west?.index, 12);
-  assert.equal(byName.east?.index, 1);
+  assert.equal(byName.west?.index, 4);
+  assert.equal(byName.east?.index, 23);
   assert.equal(byName.outer_nw?.index, 12);
-  assert.equal(byName.outer_ne?.index, 1);
+  assert.equal(byName.outer_ne?.index, 19);
   assert.equal(byName.outer_sw?.index, 16);
-  assert.equal(byName.outer_se?.index, 17);
+  assert.equal(byName.outer_se?.index, 27);
   assert.equal(byName.inner_nw, undefined);
   assert.equal(byName.inner_ne, undefined);
   assert.equal(byName.inner_sw, undefined);
   assert.equal(byName.inner_se, undefined);
   assert.equal(data.rules.some((rule) => rule.index === 18), false);
-  assert.equal(data.rules.some((rule) => rule.index === 13), false);
+  assert.equal(data.rules.some((rule) => rule.name === "north" && rule.index === 13), true);
+  assert.equal(data.rules.some((rule) => rule.name === "floor" && rule.index === 13), false);
   assert.ok(data.rules.findIndex((rule) => rule.name === "outer_nw")
     < data.rules.findIndex((rule) => rule.name === "north"));
   assert.ok(data.rules.findIndex((rule) => rule.name === "east")
@@ -138,7 +140,7 @@ test("a 4x4 sheet and a 4x8 sheet both pass the 15-tileset preset", () => {
   const east = {
     Top: 1, Bottom: 1, Left: 1, Right: 2, TopLeft: 1, TopRight: 2, BottomLeft: 1, BottomRight: 2,
   } satisfies Neighbors;
-  assert.equal(fifteenFixedResolve(east, "4x8").index, 1);
+  assert.equal(fifteenFixedResolve(east, "4x8").index, 23);
   const alone = {
     Top: 2, Bottom: 2, Left: 2, Right: 2, TopLeft: 2, TopRight: 2, BottomLeft: 2, BottomRight: 2,
   } satisfies Neighbors;
@@ -146,7 +148,7 @@ test("a 4x4 sheet and a 4x8 sheet both pass the 15-tileset preset", () => {
   const north = {
     Top: 2, Bottom: 1, Left: 1, Right: 1, TopLeft: 2, TopRight: 2, BottomLeft: 1, BottomRight: 1,
   } satisfies Neighbors;
-  assert.equal(fifteenFixedResolve(north, "4x8").index, 10);
+  assert.equal(fifteenFixedResolve(north, "4x8").index, 13);
 });
 
 test("PixelLab Wang 5x8 binds the fixed index table", () => {
@@ -626,10 +628,10 @@ test("the unity builder slices, binds m_TilingRules, and adds both menus", () =>
   assert.match(script, /case "floor": return 41;/);
   assert.match(script, /case "floor": return 26;/);
   assert.match(script, /case "outer_nw": return 61;/);
-  assert.match(script, /case "east": return 23;/);
+  assert.match(script, /case "east": return 39;/);
   assert.match(script, /case "south": return 86;/);
   assert.match(script, /case "north": return 62;/);
-  assert.match(script, /case "west": return 32;/);
+  assert.match(script, /case "west": return 36;/);
   assert.match(script, /case "inner_nw": return 73;/);
   assert.match(script, /case "pillar_top": return 15;/);
   assert.match(script, /case "pillar_mid": return 27;/);
@@ -770,9 +772,10 @@ test("Godot 12x8 uses every index and both fill modes", () => {
   assert.equal(byName.outer_se?.index, 87);
   assert.equal(byName.north?.index, 62);
   assert.equal(byName.south?.index, 86);
-  assert.equal(byName.west?.index, 32);
-  assert.equal(byName.east?.index, 23);
-  assert.notEqual(byName.east?.index, 39);
+  assert.equal(byName.west?.index, 36);
+  assert.equal(byName.east?.index, 39);
+  assert.notEqual(byName.west?.index, 32);
+  assert.notEqual(byName.east?.index, 23);
   assert.notEqual(byName.south?.index, 89);
   assert.notEqual(byName.east?.index, 11);
   assert.notEqual(byName.east?.index, 3);
