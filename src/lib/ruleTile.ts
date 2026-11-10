@@ -391,11 +391,12 @@ export const GODOT_FULL_MASK = 255;
 /**
  * PixelLab Godot 12×8 floor mode. Painted = 1, empty = 2.
  * The bright room sits on tile_34 (row 2, column 10).
- * The north wall is three rows: header tile_49 tile_50 tile_51, body tile_61
- * tile_62 tile_63, base tile_73 tile_74 tile_75. The south pillar is tile_85
- * tile_86 tile_87, and the row above it is the same base triple. West is
- * tile_36. East is tile_51, the straight rune opposite tile_36. tile_39 mixes
- * in a black pillar, so it is not the east wall. Deep cells are tile_34.
+ * The north wall is two rows: header tile_01 tile_02 tile_03, body tile_61
+ * tile_62 tile_63. The next row is tile_34. The south pillar is tile_61
+ * tile_62 tile_63, and the row above it is tile_01 tile_02 tile_03. West is
+ * tile_36. East is tile_47, the straight rune at column 11. tile_51 is a
+ * hooked corner and tile_50 is a U pillar, so floor mode does not use them.
+ * Deep cells are tile_34.
  */
 export const GODOT_FLOOR_INDEX = {
   floor: 34,
@@ -406,14 +407,14 @@ export const GODOT_FLOOR_INDEX = {
   corridorV: 24,
   corridorVTop: 12,
   corridorVBottom: 48,
-  outerNW: 49,
-  outerNE: 51,
-  outerSW: 85,
-  outerSE: 87,
+  outerNW: 1,
+  outerNE: 3,
+  outerSW: 61,
+  outerSE: 63,
   north: 62,
-  south: 86,
+  south: 62,
   west: 36,
-  east: 51,
+  east: 47,
   innerNW: 44,
   innerNE: 47,
   innerSW: 20,
@@ -1158,19 +1159,17 @@ function godotBand(
 
 /**
  * 12×8 floor rules. Check order is the distance from the north and south edges:
- * south pillar, the cap above it, then the three north rows, then the side
- * walls, then the bright floor. Unity reads Up2, Up3, and Down2 as well as
- * the eight neighbours.
+ * south pillar, the cap above it, then the two north rows, then the side
+ * walls, then the bright floor. There is no third north row.
  */
 function godotFloorSlots(): Slot[] {
   const index = GODOT_FLOOR_INDEX;
   const floor = neighborsFromCornerMask(15);
   return [
-    ...godotBand("south", "남쪽 기둥", [85, 86, 87], { Bottom: 2 }),
-    ...godotBand("south_cap", "남쪽 마감", [73, 74, 75], { Bottom: 1, Down2: 2 }),
-    ...godotBand("north_cap", "북쪽 마감", [49, 50, 51], { Top: 2, Bottom: 1 }),
+    ...godotBand("south", "남쪽 기둥", [61, 62, 63], { Bottom: 2 }),
+    ...godotBand("south_cap", "남쪽 마감", [1, 2, 3], { Bottom: 1, Down2: 2 }),
+    ...godotBand("north_cap", "북쪽 마감", [1, 2, 3], { Top: 2, Bottom: 1 }),
     ...godotBand("north", "북쪽 몸통", [61, 62, 63], { Top: 1, Up2: 2, Bottom: 1 }),
-    ...godotBand("north_base", "북쪽 밑단", [73, 74, 75], { Top: 1, Up2: 1, Up3: 2, Bottom: 1 }),
     wangFixedSlot(index.west, "west", "서쪽 좌측 테두리", 7, cardinals({
       Left: 2, Right: 1, Top: 1, Bottom: 1,
     })),
@@ -1587,8 +1586,7 @@ export function buildRuleTileScript(): string {
 //   wall pillar (single and shaft)  tile_06
 //   wall borders are the floor-mode sprites of the opposite role
 //   black, never a rule             tile_31 tile_32 tile_33 tile_34 tile_36 tile_37 tile_38 tile_39
-// tile_00, tile_01, tile_02 and tile_05, tile_07 are wall graphics. Floor mode
-// does not use them as terrain rules. Wall mode uses tile_06 as the pillar.
+// Wall mode uses tile_06 as the pillar.
 // doubleHeight stays false; each rule samples one square cell.
 // Godot 12x4 is the 47-blob template (47 rules). A 12x8 sheet is 96 cells and
 // binds the fillMode tables below. A 24x8 download is the 12x4 template at
@@ -1597,18 +1595,17 @@ export function buildRuleTileScript(): string {
 //   floor single                    tile_72
 //   floor corridors                 tile_02 tile_01 tile_03 tile_24 tile_12 tile_48
 //   floor north rows, left/mid/right
-//     header tile_49 tile_50 tile_51
+//     header tile_01 tile_02 tile_03
 //     body   tile_61 tile_62 tile_63
-//     base   tile_73 tile_74 tile_75
-//   floor south cap above the pillar  tile_73 tile_74 tile_75
-//   floor south pillar                 tile_85 tile_86 tile_87
-//   floor west/east                    tile_36 tile_51
+//   floor south cap above the pillar  tile_01 tile_02 tile_03
+//   floor south pillar                 tile_61 tile_62 tile_63
+//   floor west/east                    tile_36 tile_47
 //   floor interior                     tile_34
-//   Up2, Up3, and Down2 are neighbours two and three cells away.
-//   tile_39 mixes a black pillar into the east edge, so floor mode does not use it.
+//   Up2 and Down2 are neighbours two cells away. There is no third north row.
+//   tile_49 tile_50 tile_51 and tile_73 tile_74 tile_75 are not floor borders.
+//   tile_51 is a hooked corner. tile_47 is the straight east rune (column 11).
 //   tile_89 is a black fence and is not a floor edge.
-//   tile_47 is a black hole and tile_27 is a lip. Floor mode does not use either
-//   as the east wall. tile_58 and tile_22 are dark cobble, not the room lip.
+//   tile_58 and tile_22 are dark cobble, not the room lip.
 //   wall interior                   tile_41
 //   wall outer NW/NE/SW/SE          tile_20 tile_23 tile_56 tile_59
 //   wall north/south/west/east      tile_50 tile_74 tile_35 tile_32
@@ -1939,28 +1936,24 @@ public static class RuleTileBuilder
             case "corridor_v": return 24;
             case "corridor_v_top": return 12;
             case "corridor_v_bottom": return 48;
-            case "north_cap_w": return 49;
-            case "north_cap_e": return 51;
-            case "north_cap": return 50;
-            case "north_cap_n": return 50;
+            case "north_cap_w": return 1;
+            case "north_cap_e": return 3;
+            case "north_cap": return 2;
+            case "north_cap_n": return 2;
             case "north_w": return 61;
             case "north_e": return 63;
             case "north": return 62;
             case "north_n": return 62;
-            case "north_base_w": return 73;
-            case "north_base_e": return 75;
-            case "north_base": return 74;
-            case "north_base_n": return 74;
-            case "south_cap_w": return 73;
-            case "south_cap_e": return 75;
-            case "south_cap": return 74;
-            case "south_cap_n": return 74;
-            case "south_w": return 85;
-            case "south_e": return 87;
-            case "south": return 86;
-            case "south_n": return 86;
+            case "south_cap_w": return 1;
+            case "south_cap_e": return 3;
+            case "south_cap": return 2;
+            case "south_cap_n": return 2;
+            case "south_w": return 61;
+            case "south_e": return 63;
+            case "south": return 62;
+            case "south_n": return 62;
             case "west": return 36;
-            case "east": return 51;
+            case "east": return 47;
             case "outer_sw": return 85;
             case "outer_se": return 87;
             default: return -1;

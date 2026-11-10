@@ -270,7 +270,7 @@ function ruleOrderSummary(data: RuleDataFile): string {
   if (data.preset === "godot-47" && data.columns === 12 && data.rows >= 8) {
     return data.fillMode === "wall"
       ? "벽 모드: 0–95 고정 룰, 내부 tile_41, 남쪽 테두리 아래에 기둥"
-      : "바닥 모드: 북쪽 49·50·51 / 61·62·63 / 73·74·75, 남쪽 마감 73·74·75 아래 85·86·87, 서 tile_36, 동 tile_51, 내부 tile_34";
+      : "바닥 모드: 북쪽 01·02·03 아래 61·62·63, 그 아래는 tile_34. 남쪽 01·02·03 아래 61·62·63. 서 tile_36, 동 tile_47";
   }
   if (data.preset === "15-tileset") {
     if (data.columns === 4 && data.rows >= 8) {
