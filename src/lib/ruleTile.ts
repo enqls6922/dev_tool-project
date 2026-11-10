@@ -346,7 +346,10 @@ export const GODOT_FULL_MASK = 255;
 
 /**
  * PixelLab Godot 12×8 floor mode. Painted = 1, empty = 2.
- * Outer corners are listed before straight edges. Indices run through 0–95.
+ * The bright room sits on tile_34. Straight edges are unbroken runs:
+ * west tile_32, east tile_27 (tile_39 is the same straight edge; tile_35 is an L corner),
+ * north tile_05, south tile_89 (tile_49–51 are pillar feet).
+ * Outer corners are tile_04, tile_06, tile_88, tile_91.
  */
 export const GODOT_FLOOR_INDEX = {
   floor: 34,
@@ -357,18 +360,18 @@ export const GODOT_FLOOR_INDEX = {
   corridorV: 24,
   corridorVTop: 12,
   corridorVBottom: 48,
-  outerNW: 73,
-  outerNE: 75,
-  outerSW: 49,
-  outerSE: 51,
-  north: 74,
-  south: 50,
+  outerNW: 4,
+  outerNE: 6,
+  outerSW: 88,
+  outerSE: 91,
+  north: 5,
+  south: 89,
   west: 32,
-  east: 35,
-  innerNW: 20,
-  innerNE: 23,
-  innerSW: 56,
-  innerSE: 59,
+  east: 27,
+  innerNW: 44,
+  innerNE: 47,
+  innerSW: 20,
+  innerSE: 23,
 } as const;
 
 /** Wall mode. Interior is the dark fill. Border sprites swap with floor mode. */
@@ -405,11 +408,11 @@ export const WANG_FLOOR_OVERLAYS: readonly SpriteOverlay[] = [
   { source: 12, tile: 7, dy: -1 },
 ];
 
-/** Caps drawn on the empty cell above a floor-mode north lip (73, 74, 75). */
+/** 3D wall faces drawn only on the empty cell above a floor-mode north lip (4, 5, 6). */
 export const GODOT_FLOOR_OVERLAYS: readonly SpriteOverlay[] = [
-  { source: 73, tile: 61, dy: -1 },
-  { source: 74, tile: 62, dy: -1 },
-  { source: 75, tile: 63, dy: -1 },
+  { source: 4, tile: 85, dy: -1 },
+  { source: 5, tile: 86, dy: -1 },
+  { source: 6, tile: 87, dy: -1 },
 ];
 
 /** Pillar feet drawn on the empty cell below a wall-mode south lip. */
@@ -1418,15 +1421,18 @@ export function buildRuleTileScript(): string {
 // tile_00, tile_01, tile_02 and tile_05, tile_07 are wall graphics. Floor mode
 // does not use them as terrain rules. Wall mode uses tile_06 as the pillar.
 // doubleHeight stays false; each rule samples one square cell.
-// Godot 12x4 is the 47-blob template (47 rules). A 12x8 sheet uses every index
-// from 0 through 95 and the fillMode tables below. A 24x8 download is the
-// 12x4 template at twice the tile size.
+// Godot 12x4 is the 47-blob template (47 rules). A 12x8 sheet is 96 cells and
+// binds the fillMode tables below. A 24x8 download is the 12x4 template at
+// twice the tile size.
 //   floor interior                  tile_34
 //   floor single                    tile_72
 //   floor corridors                 tile_02 tile_01 tile_03 tile_24 tile_12 tile_48
-//   floor outer NW/NE/SW/SE         tile_73 tile_75 tile_49 tile_51
-//   floor north/south/west/east     tile_74 tile_50 tile_32 tile_35
-//   floor inner NW/NE/SW/SE         tile_20 tile_23 tile_56 tile_59
+//   floor outer NW/NE/SW/SE         tile_04 tile_06 tile_88 tile_91
+//   floor north/south/west/east     tile_05 tile_89 tile_32 tile_27
+//   floor inner NW/NE/SW/SE         tile_44 tile_47 tile_20 tile_23
+//   floor north-wall overlay        tile_85 tile_86 tile_87 above tile_04 tile_05 tile_06
+//   tile_35 is an L corner and tile_49 tile_50 tile_51 are pillar feet. Floor mode
+//   does not use them as straight edges. tile_39 is the alternate east straight edge.
 //   wall interior                   tile_41
 //   wall outer NW/NE/SW/SE          tile_20 tile_23 tile_56 tile_59
 //   wall north/south/west/east      tile_50 tile_74 tile_35 tile_32
@@ -1757,18 +1763,18 @@ public static class RuleTileBuilder
             case "corridor_v": return 24;
             case "corridor_v_top": return 12;
             case "corridor_v_bottom": return 48;
-            case "outer_nw": return 73;
-            case "outer_ne": return 75;
-            case "outer_sw": return 49;
-            case "outer_se": return 51;
-            case "north": return 74;
-            case "south": return 50;
+            case "outer_nw": return 4;
+            case "outer_ne": return 6;
+            case "outer_sw": return 88;
+            case "outer_se": return 91;
+            case "north": return 5;
+            case "south": return 89;
             case "west": return 32;
-            case "east": return 35;
-            case "inner_nw": return 20;
-            case "inner_ne": return 23;
-            case "inner_sw": return 56;
-            case "inner_se": return 59;
+            case "east": return 27;
+            case "inner_nw": return 44;
+            case "inner_ne": return 47;
+            case "inner_sw": return 20;
+            case "inner_se": return 23;
             default: return -1;
         }
     }

@@ -585,7 +585,11 @@ test("the unity builder slices, binds m_TilingRules, and adds both menus", () =>
   assert.match(script, /case "floor": return 34;/);
   assert.match(script, /case "floor": return 41;/);
   assert.match(script, /case "floor": return 26;/);
-  assert.match(script, /case "outer_nw": return 73;/);
+  assert.match(script, /case "outer_nw": return 4;/);
+  assert.match(script, /case "east": return 27;/);
+  assert.match(script, /case "south": return 89;/);
+  assert.match(script, /case "north": return 5;/);
+  assert.match(script, /case "inner_nw": return 73;/);
   assert.match(script, /case "pillar_top": return 15;/);
   assert.match(script, /case "pillar_mid": return 27;/);
   assert.match(script, /case "single": return 6;/);
@@ -719,18 +723,19 @@ test("Godot 12x8 uses every index and both fill modes", () => {
   assert.equal(byName.corridor_v?.index, 24);
   assert.equal(byName.corridor_v_top?.index, 12);
   assert.equal(byName.corridor_v_bottom?.index, 48);
-  assert.equal(byName.outer_nw?.index, 73);
-  assert.equal(byName.outer_ne?.index, 75);
-  assert.equal(byName.outer_sw?.index, 49);
-  assert.equal(byName.outer_se?.index, 51);
-  assert.equal(byName.north?.index, 74);
-  assert.equal(byName.south?.index, 50);
+  assert.equal(byName.outer_nw?.index, 4);
+  assert.equal(byName.outer_ne?.index, 6);
+  assert.equal(byName.outer_sw?.index, 88);
+  assert.equal(byName.outer_se?.index, 91);
+  assert.equal(byName.north?.index, 5);
+  assert.equal(byName.south?.index, 89);
   assert.equal(byName.west?.index, 32);
-  assert.equal(byName.east?.index, 35);
-  assert.equal(byName.inner_nw?.index, 20);
-  assert.equal(byName.inner_ne?.index, 23);
-  assert.equal(byName.inner_sw?.index, 56);
-  assert.equal(byName.inner_se?.index, 59);
+  assert.equal(byName.east?.index, 27);
+  assert.equal(byName.inner_nw?.index, 44);
+  assert.equal(byName.inner_ne?.index, 47);
+  assert.equal(byName.inner_sw?.index, 20);
+  assert.equal(byName.inner_se?.index, 23);
+  assert.equal(floorData.rules.some((rule) => [35, 49, 50, 51, 73, 74, 75].includes(rule.index)), false);
   assert.equal(byName.north?.neighbors.Left, 1);
   assert.equal(byName.north?.neighbors.Right, 1);
 
@@ -746,7 +751,7 @@ test("Godot 12x8 uses every index and both fill modes", () => {
   const north = {
     Top: 2, Bottom: 1, Left: 1, Right: 1, TopLeft: 2, TopRight: 2, BottomLeft: 1, BottomRight: 1,
   } satisfies Neighbors;
-  assert.equal(godotFixedResolve(north, "floor").index, 74);
+  assert.equal(godotFixedResolve(north, "floor").index, 5);
 
   const wall = analyzeSheet({ width: 384, height: 256, tileSize: 32, preset: "godot-47", fillMode: "wall" });
   assert.equal(wall.warning, null);
