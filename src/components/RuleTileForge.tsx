@@ -9,12 +9,14 @@ import { RuleTilePreview } from "@/components/RuleTilePreview";
 import { TileSandbox } from "@/components/TileSandbox";
 import { useRuleTileForge } from "@/hooks/useRuleTileForge";
 import { safeDisplayName } from "@/lib/uploadPolicy";
-import { FIFTEEN_LAYOUT, type SandboxLayout } from "@/lib/tileSandbox";
+import { type SandboxLayout } from "@/lib/tileSandbox";
 import {
   DIRECTION_KEYS,
+  FILL_MODES,
   PRESET_INFO,
   RULE_PRESETS,
   RULE_TILE_SIZES,
+  type FillMode,
   type NeighborValue,
   type Neighbors,
   type RuleDataFile,
@@ -28,7 +30,10 @@ export function RuleTileForge() {
   const preset = PRESET_INFO[forge.preset];
   const data = forge.analysis?.data ?? null;
   const previewError = forge.error ?? forge.analysis?.error ?? null;
-  const sandboxLayout = useMemo(() => layoutFor(data), [data]);
+  const sandboxLayout = useMemo(
+    () => layoutFor(data, forge.preset, forge.fillMode),
+    [data, forge.preset, forge.fillMode],
+  );
   const canSample = Boolean(data);
   const sampleTileSize = data?.tileSize ?? forge.tileSize;
 
@@ -57,6 +62,40 @@ export function RuleTileForge() {
             </div>
 
             <fieldset>
+              <legend className="mb-2 flex items-center gap-1.5 text-xs font-medium tracking-wide text-[#9aa3b5] uppercase">
+                채우기 모드
+                <span className="font-normal tracking-normal text-[#6f788a] normal-case">Fill Mode</span>
+                <HelpTip
+                  label="채우기 모드 안내"
+                  text="브러시로 칠한 칸의 안쪽을 무엇으로 채울지 고릅니다. 바닥 모드는 밝은 실내 바닥이고, 벽 모드는 어두운 벽과 기둥입니다. Wang 5×8과 Godot 12×8에 적용되고, 고른 모드의 RuleData.json이 Unity RuleTile로 나갑니다."
+                />
+              </legend>
+              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2" role="radiogroup" aria-label="브러시 채우기 모드">
+                {FILL_MODES.map((mode) => {
+                  const selected = forge.fillMode === mode;
+                  const copy = FILL_MODE_COPY[mode];
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => forge.setFillMode(mode)}
+                      className={`min-h-12 rounded-lg border px-3 py-2 text-left transition ${
+                        selected
+                          ? "border-[#e39b4b] bg-[#e39b4b]/15 text-[#f3d2a8]"
+                          : "border-[#2a3140] bg-[#0d1016] text-[#c5cbd6] hover:border-[#465066]"
+                      }`}
+                    >
+                      <span className="block text-sm font-medium">{copy.title}</span>
+                      <span className="mt-0.5 block text-[11px] leading-4 text-[#9aa3b5]">{copy.detail}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+
+            <fieldset className="mt-4">
               <legend className="mb-2 flex items-center gap-1.5 text-xs font-medium tracking-wide text-[#9aa3b5] uppercase">
                 레이아웃 선택
                 <span className="font-normal tracking-normal text-[#6f788a] normal-case">Preset</span>
@@ -161,7 +200,7 @@ export function RuleTileForge() {
             onSelect={setActiveIndex}
             summary={
               data
-                ? `룰 ${data.rules.length}개 · 기본 스프라이트 ${data.cells.find((cell) => cell.index === data.defaultSpriteIndex)?.sprite ?? ""} · ${data.preset === "wang" && data.rows >= 8 ? "좁은 통로, 외곽 코너, 직선 테두리, 안쪽 코너, 바닥 순으로 검사" : "조건이 많은 룰부터 검사"}`
+                ? `룰 ${data.rules.length}개 · 기본 스프라이트 ${data.cells.find((cell) => cell.index === data.defaultSpriteIndex)?.sprite ?? ""} · ${ruleOrderSummary(data)}`
                 : "시트가 프리셋과 맞으면 8방향 조건이 여기에 나옵니다."
             }
           />
@@ -196,11 +235,42 @@ export function RuleTileForge() {
   );
 }
 
-function layoutFor(data: RuleDataFile | null): SandboxLayout {
-  if (!data) return FIFTEEN_LAYOUT;
-  if (data.preset === "wang") return { kind: "wang", tall: data.rows >= 8 };
-  if (data.preset === "godot-47") return { kind: "godot" };
-  return { kind: "fifteen", shape: data.columns === 4 ? "4x4" : "3x5" };
+function layoutFor(data: RuleDataFile | null, preset: RulePreset, fillMode: FillMode): SandboxLayout {
+  const active = data?.preset ?? preset;
+  if (active === "15-tileset") {
+    return { kind: "fifteen", shape: data?.columns === 4 ? "4x4" : "3x5" };
+  }
+  if (active === "wang") {
+    const tall = data ? data.rows >= 8 : true;
+    return { kind: "wang", tall, fillMode: tall ? fillMode : "floor" };
+  }
+  const tall = data ? data.columns === 12 && data.rows >= 8 : preset === "godot-47";
+  return { kind: "godot", tall, fillMode: tall ? fillMode : "floor" };
+}
+
+const FILL_MODE_COPY: Record<FillMode, { title: string; detail: string }> = {
+  floor: {
+    title: "🏠 방/바닥 그리기",
+    detail: "안쪽 = 밝은 바닥",
+  },
+  wall: {
+    title: "🧱 벽/기둥 그리기",
+    detail: "안쪽 = 어두운 벽/외부",
+  },
+};
+
+function ruleOrderSummary(data: RuleDataFile): string {
+  if (data.preset === "wang" && data.rows >= 8) {
+    return data.fillMode === "wall"
+      ? "벽 모드: 기둥, 외곽 코너, 직선 테두리, 안쪽 코너, 내부 tile_26 순"
+      : "바닥 모드: 통로, 외곽 코너, 직선 테두리, 안쪽 코너, 내부 tile_16 순";
+  }
+  if (data.preset === "godot-47" && data.columns === 12 && data.rows >= 8) {
+    return data.fillMode === "wall"
+      ? "벽 모드: 0–95 고정 룰, 내부 tile_41, 남쪽 테두리 아래에 기둥"
+      : "바닥 모드: 0–95 고정 룰, 내부 tile_34, 북쪽 테두리 위에 기둥";
+  }
+  return "조건이 많은 룰부터 검사";
 }
 
 function RuleTable({

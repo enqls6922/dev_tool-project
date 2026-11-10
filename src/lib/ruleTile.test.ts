@@ -13,15 +13,20 @@ import {
   detectPreset,
   firstMatchingRule,
   godotCellForMask,
+  godotFixedResolve,
   neighborsFromCornerMask,
   ruleMatches,
   suggestPreset,
   tileSpriteName,
   unitySliceRect,
   GODOT_BLOB_GRID,
+  GODOT_CELL_COUNT,
+  GODOT_FLOOR_INDEX,
+  GODOT_WALL_INDEX,
   WANG_5X8_BLACK,
   WANG_5X8_BORDER,
   WANG_5X8_INDEX,
+  WANG_5X8_WALL_INDEX,
   WANG_TALL_FLOOR_INDEX,
   isWang5x8Black,
   wangCellMask,
@@ -298,6 +303,7 @@ test("PixelLab Wang 5x8 binds the fixed index table", () => {
   assert.match(json, /"columns":5/);
   assert.match(json, /"rows":8/);
   assert.match(json, /"defaultSpriteIndex":16/);
+  assert.match(json, /"fillMode":"floor"/);
   assert.match(json, /"name":"floor"/);
   assert.match(json, /"name":"single"/);
   assert.equal(data.rules.some((rule) => isWang5x8Black(rule.index)), false);
@@ -572,7 +578,17 @@ test("the unity builder slices, binds m_TilingRules, and adds both menus", () =>
   assert.match(script, /case "corridor_ns": return 8;/);
   assert.match(script, /case "corridor_ns_top": return 3;/);
   assert.match(script, /case "corridor_ns_bottom": return 13;/);
-  assert.match(script, /if \(IsWang5x8\(data\)\) return 16;/);
+  assert.match(script, /IsWang5x8\(data\)\) return IsWallFill\(data\) \? 26 : 16;/);
+  assert.match(script, /IsGodot12x8\(data\)\) return IsWallFill\(data\) \? 41 : 34;/);
+  assert.match(script, /public string fillMode;/);
+  assert.match(script, /BindGodot12x8Index/);
+  assert.match(script, /case "floor": return 34;/);
+  assert.match(script, /case "floor": return 41;/);
+  assert.match(script, /case "floor": return 26;/);
+  assert.match(script, /case "outer_nw": return 73;/);
+  assert.match(script, /case "pillar_top": return 15;/);
+  assert.match(script, /case "pillar_mid": return 27;/);
+  assert.match(script, /case "single": return 6;/);
   assert.match(script, /index == 31 \|\| index == 32 \|\| index == 33 \|\| index == 34/);
   assert.match(script, /index == 36 \|\| index == 37 \|\| index == 38 \|\| index == 39/);
   assert.match(script, /IsWang5x8Black\(index\)\) continue;/);
@@ -604,6 +620,7 @@ test("aspect ratio picks the PixelLab preset and leaves a valid choice alone", (
   assert.equal(detectPreset(160, 256, 32), "wang");
   assert.equal(detectPreset(160, 128, 32), "wang");
   assert.equal(detectPreset(384, 128, 32), "godot-47");
+  assert.equal(detectPreset(384, 256, 32), "godot-47");
   assert.equal(detectPreset(768, 256, 32), "godot-47");
   assert.equal(detectPreset(90, 150, 32), "15-tileset");
 
@@ -613,4 +630,173 @@ test("aspect ratio picks the PixelLab preset and leaves a valid choice alone", (
   assert.equal(suggestPreset(768, 256, 32, "wang"), "godot-47");
   assert.equal(suggestPreset(160, 128, 32, "wang"), "wang");
   assert.equal(DIRECTION_KEYS.length, 8);
+});
+
+test("Wang 5x8 wall mode inverts the floor border onto the dark fill", () => {
+  const analysis = analyzeSheet({
+    width: 160,
+    height: 256,
+    tileSize: 32,
+    preset: "wang",
+    fillMode: "wall",
+  });
+  assert.equal(analysis.error, null);
+  assert.equal(analysis.warning, null);
+  const data = analysis.data;
+  assert.ok(data);
+  assert.equal(data.fillMode, "wall");
+  assert.equal(data.defaultSpriteIndex, WANG_5X8_WALL_INDEX.fill);
+  assert.equal(data.defaultSpriteIndex, 26);
+  assert.equal(data.cells[26]?.label, "내부 벽");
+  assert.equal(data.cells[26]?.fallback, true);
+  assert.equal(data.cells[16]?.role, "unmapped");
+  assert.equal(data.cells[6]?.role, "rule");
+  assert.equal(data.rules.filter((rule) => rule.index === 6).length, 4);
+  assert.equal(data.rules.some((rule) => isWang5x8Black(rule.index)), false);
+  assert.deepEqual(
+    data.rules.filter((rule) => rule.name !== "single" && !rule.name.startsWith("corridor")).map((rule) => rule.index),
+    [
+      WANG_5X8_WALL_INDEX.outerNW,
+      WANG_5X8_WALL_INDEX.outerNE,
+      WANG_5X8_WALL_INDEX.outerSW,
+      WANG_5X8_WALL_INDEX.outerSE,
+      WANG_5X8_WALL_INDEX.north,
+      WANG_5X8_WALL_INDEX.south,
+      WANG_5X8_WALL_INDEX.west,
+      WANG_5X8_WALL_INDEX.east,
+      WANG_5X8_WALL_INDEX.innerNW,
+      WANG_5X8_WALL_INDEX.innerNE,
+      WANG_5X8_WALL_INDEX.innerSW,
+      WANG_5X8_WALL_INDEX.innerSE,
+      WANG_5X8_WALL_INDEX.fill,
+    ],
+  );
+
+  const surrounded = {
+    Top: 1, Bottom: 1, Left: 1, Right: 1, TopLeft: 1, TopRight: 1, BottomLeft: 1, BottomRight: 1,
+  } satisfies Neighbors;
+  assert.equal(wangResolve(surrounded, true, "wall").index, 26);
+  const north = {
+    Top: 2, Bottom: 1, Left: 1, Right: 1, TopLeft: 2, TopRight: 2, BottomLeft: 1, BottomRight: 1,
+  } satisfies Neighbors;
+  assert.equal(wangResolve(north, true, "wall").index, WANG_5X8_WALL_INDEX.north);
+  assert.equal(wangResolve(north, true, "wall").index, WANG_5X8_INDEX.south);
+  const pillar = {
+    Top: 1, Bottom: 1, Left: 2, Right: 2, TopLeft: 2, TopRight: 2, BottomLeft: 2, BottomRight: 2,
+  } satisfies Neighbors;
+  assert.equal(wangResolve(pillar, true, "wall").index, 6);
+  assert.equal(wangResolve(actualFromCornerMask(0), true, "wall").index, 6);
+  const script = buildRuleTileScript();
+  for (const rule of data.rules) {
+    assert.match(script, new RegExp(`case "${rule.name}": return ${rule.index};`));
+  }
+});
+
+test("Godot 12x8 uses every index and both fill modes", () => {
+  const floor = analyzeSheet({ width: 384, height: 256, tileSize: 32, preset: "godot-47", fillMode: "floor" });
+  assert.equal(floor.error, null);
+  assert.equal(floor.warning, null);
+  const floorData = floor.data;
+  assert.ok(floorData);
+  assert.equal(floorData.columns, 12);
+  assert.equal(floorData.rows, 8);
+  assert.equal(floorData.cells.length, GODOT_CELL_COUNT);
+  assert.equal(floorData.fillMode, "floor");
+  assert.equal(floorData.defaultSpriteIndex, 34);
+  assert.equal(floorData.cells[34]?.label, "내부 바닥");
+  assert.equal(floorData.cells[34]?.sprite, "tile_34");
+  assert.equal(floorData.cells[72]?.label, "고립 단독");
+  assert.equal(floorData.cells[95]?.role, "unmapped");
+  assert.equal(floorData.cells[95]?.label, "미사용");
+  assert.equal(floorData.rules.some((rule) => rule.index > 47), true);
+  assert.equal(floorData.rules.some((rule) => rule.index === GODOT_FLOOR_INDEX.outerNW), true);
+  assert.equal(floorData.rules.findIndex((rule) => rule.name === "outer_nw")
+    < floorData.rules.findIndex((rule) => rule.name === "north"), true);
+  const byName = Object.fromEntries(floorData.rules.map((rule) => [rule.name, rule]));
+  assert.equal(byName.corridor_h?.index, 2);
+  assert.equal(byName.corridor_h_left?.index, 1);
+  assert.equal(byName.corridor_h_right?.index, 3);
+  assert.equal(byName.corridor_v?.index, 24);
+  assert.equal(byName.corridor_v_top?.index, 12);
+  assert.equal(byName.corridor_v_bottom?.index, 48);
+  assert.equal(byName.outer_nw?.index, 73);
+  assert.equal(byName.outer_ne?.index, 75);
+  assert.equal(byName.outer_sw?.index, 49);
+  assert.equal(byName.outer_se?.index, 51);
+  assert.equal(byName.north?.index, 74);
+  assert.equal(byName.south?.index, 50);
+  assert.equal(byName.west?.index, 32);
+  assert.equal(byName.east?.index, 35);
+  assert.equal(byName.inner_nw?.index, 20);
+  assert.equal(byName.inner_ne?.index, 23);
+  assert.equal(byName.inner_sw?.index, 56);
+  assert.equal(byName.inner_se?.index, 59);
+  assert.equal(byName.north?.neighbors.Left, 1);
+  assert.equal(byName.north?.neighbors.Right, 1);
+
+  const surrounded = {
+    Top: 1, Bottom: 1, Left: 1, Right: 1, TopLeft: 1, TopRight: 1, BottomLeft: 1, BottomRight: 1,
+  } satisfies Neighbors;
+  assert.equal(godotFixedResolve(surrounded, "floor").index, 34);
+  assert.equal(firstMatchingRule(floorData.rules, surrounded), 34);
+  const alone = {
+    Top: 2, Bottom: 2, Left: 2, Right: 2, TopLeft: 2, TopRight: 2, BottomLeft: 2, BottomRight: 2,
+  } satisfies Neighbors;
+  assert.equal(godotFixedResolve(alone, "floor").index, 72);
+  const north = {
+    Top: 2, Bottom: 1, Left: 1, Right: 1, TopLeft: 2, TopRight: 2, BottomLeft: 1, BottomRight: 1,
+  } satisfies Neighbors;
+  assert.equal(godotFixedResolve(north, "floor").index, 74);
+
+  const wall = analyzeSheet({ width: 384, height: 256, tileSize: 32, preset: "godot-47", fillMode: "wall" });
+  assert.equal(wall.warning, null);
+  const wallData = wall.data;
+  assert.ok(wallData);
+  assert.equal(wallData.fillMode, "wall");
+  assert.equal(wallData.defaultSpriteIndex, 41);
+  assert.equal(wallData.cells[41]?.label, "내부 벽");
+  const wallByName = Object.fromEntries(wallData.rules.map((rule) => [rule.name, rule]));
+  assert.equal(wallByName.floor?.index, GODOT_WALL_INDEX.fill);
+  assert.equal(wallByName.outer_nw?.index, 20);
+  assert.equal(wallByName.outer_ne?.index, 23);
+  assert.equal(wallByName.outer_sw?.index, 56);
+  assert.equal(wallByName.outer_se?.index, 59);
+  assert.equal(wallByName.north?.index, 50);
+  assert.equal(wallByName.north?.neighbors.Left, 0);
+  assert.equal(wallByName.south?.index, 74);
+  assert.equal(wallByName.west?.index, 35);
+  assert.equal(wallByName.east?.index, 32);
+  assert.equal(wallByName.inner_nw?.index, 73);
+  assert.equal(wallByName.inner_ne?.index, 75);
+  assert.equal(wallByName.inner_sw?.index, 49);
+  assert.equal(wallByName.inner_se?.index, 51);
+  assert.equal(wallByName.pillar_top?.index, 15);
+  assert.equal(wallByName.pillar_mid?.index, 27);
+  assert.equal(wallByName.pillar_bottom?.index, 63);
+  assert.equal(wallByName.single?.index, 63);
+  assert.ok(wallData.rules.findIndex((rule) => rule.name === "outer_sw")
+    < wallData.rules.findIndex((rule) => rule.name === "south"));
+  assert.ok(wallData.rules.findIndex((rule) => rule.name === "pillar_bottom")
+    < wallData.rules.findIndex((rule) => rule.name === "south"));
+  assert.equal(godotFixedResolve(surrounded, "wall").index, 41);
+  assert.equal(godotFixedResolve(north, "wall").index, 50);
+  const shaft = {
+    Top: 1, Bottom: 1, Left: 2, Right: 2, TopLeft: 2, TopRight: 2, BottomLeft: 2, BottomRight: 2,
+  } satisfies Neighbors;
+  assert.equal(godotFixedResolve(shaft, "wall").index, 27);
+  assert.equal(godotFixedResolve(alone, "wall").index, 63);
+
+  const blob = analyzeSheet({ width: 384, height: 128, tileSize: 32, preset: "godot-47", fillMode: "wall" });
+  assert.equal(blob.data?.fillMode, "floor");
+  assert.equal(blob.data?.rules.length, 47);
+  assert.equal(blob.data?.defaultSpriteIndex, 33);
+  assert.equal(blob.warning, null);
+
+  const script = buildRuleTileScript();
+  for (const rule of floorData.rules) {
+    assert.match(script, new RegExp(`case "${rule.name}": return ${rule.index};`));
+  }
+  for (const rule of wallData.rules) {
+    assert.match(script, new RegExp(`case "${rule.name}": return ${rule.index};`));
+  }
 });

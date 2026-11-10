@@ -144,7 +144,7 @@ export function TileSandbox({ previewUrl, tileSize, canSample, layout }: Props) 
         <div>
           <h2 className="text-sm font-semibold text-[#ece7df]">실시간 붓칠 샌드박스</h2>
           <p className="mt-1 text-xs leading-5 text-[#9aa3b5]">
-            8×8 칸, 각 32px. 좌클릭은 채우고 우클릭은 지웁니다. Wang 5×8은 8방향을 검사하고, 북쪽 테두리 위 빈칸에는 기둥 벽을 함께 그립니다.
+            {sandboxCaption(layout)}
           </p>
         </div>
         <div className="flex flex-wrap gap-1.5" role="toolbar" aria-label="샌드박스 도구">
@@ -235,10 +235,16 @@ export function TileSandbox({ previewUrl, tileSize, canSample, layout }: Props) 
           : canSample
             ? layout.kind === "wang"
               ? layout.tall
-                ? "Wang 5×8은 이웃 8칸을 검사합니다. 내부는 tile_16, 북쪽 tile_11, 남쪽 tile_21, 서쪽 tile_15, 동쪽 tile_17, 외곽 코너 tile_10·12·20·22, 고립은 tile_13입니다. 북쪽 테두리 위 빈칸은 tile_05·06·07입니다."
+                ? layout.fillMode === "wall"
+                  ? "Wang 5×8 벽 모드입니다. 내부는 tile_26, 1칸 기둥은 tile_06, 테두리는 바닥 모드의 반대 스프라이트입니다."
+                  : "Wang 5×8 바닥 모드입니다. 내부는 tile_16, 외곽은 tile_10·11·12·15·17·20·21·22, 북쪽 테두리 위 빈칸은 tile_05·06·07입니다."
                 : "Wang 5×4는 인덱스 = 코너 마스크입니다. 내부 바닥은 tile_15입니다."
               : layout.kind === "godot"
-                ? "PixelLab Godot (47-Blob) 12×4 칸을 8방향 이웃과 같은 픽셀 좌표로 그립니다."
+                ? layout.tall
+                  ? layout.fillMode === "wall"
+                    ? "Godot 12×8 벽 모드입니다. 내부는 tile_41, 세로 기둥은 tile_15·27·63, 남쪽 테두리 아래 빈칸에 기둥을 그립니다."
+                    : "Godot 12×8 바닥 모드입니다. 내부는 tile_34, 0–95번을 쓰고, 북쪽 테두리 위 빈칸에 tile_61·62·63을 그립니다."
+                  : "PixelLab Godot (47-Blob) 12×4 칸을 8방향 이웃과 같은 픽셀 좌표로 그립니다."
                 : layout.shape === "4x4"
                   ? "15-tileset 4×4 시트의 칸을 마스크와 1:1로 그립니다."
                   : "15-tileset 3×5 시트의 칸을 마스크와 1:1로 그립니다."
@@ -246,4 +252,19 @@ export function TileSandbox({ previewUrl, tileSize, canSample, layout }: Props) 
       </p>
     </section>
   );
+}
+
+function sandboxCaption(layout: SandboxLayout): string {
+  const base = "8×8 칸, 각 32px. 좌클릭은 채우고 우클릭은 지웁니다.";
+  if (layout.kind === "wang" && layout.tall) {
+    return layout.fillMode === "wall"
+      ? `${base} 벽 모드는 안쪽을 tile_26으로 채우고, 1칸 기둥은 tile_06입니다.`
+      : `${base} 바닥 모드는 안쪽을 tile_16으로 채우고, 북쪽 테두리 위 빈칸에 기둥을 그립니다.`;
+  }
+  if (layout.kind === "godot" && layout.tall) {
+    return layout.fillMode === "wall"
+      ? `${base} 벽 모드는 안쪽을 tile_41로 채우고, 남쪽 테두리 아래 빈칸에 기둥을 그립니다.`
+      : `${base} 바닥 모드는 안쪽을 tile_34로 채우고, 북쪽 테두리 위 빈칸에 기둥을 그립니다.`;
+  }
+  return `${base} 선택한 프리셋의 8방향 룰로 칸을 고릅니다.`;
 }
