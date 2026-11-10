@@ -112,12 +112,12 @@ test("a 4x4 sheet and a 4x8 sheet both pass the 15-tileset preset", () => {
   const byName = Object.fromEntries(data.rules.map((rule) => [rule.name, rule]));
   assert.equal(byName.floor?.index, 14);
   assert.equal(byName.single?.index, 14);
-  assert.equal(byName.north?.index, 9);
+  assert.equal(byName.north?.index, 18);
   assert.equal(byName.south?.index, 17);
   assert.equal(byName.west?.index, 12);
   assert.equal(byName.east?.index, 23);
-  assert.equal(byName.outer_nw?.index, 8);
-  assert.equal(byName.outer_ne?.index, 10);
+  assert.equal(byName.outer_nw?.index, 4);
+  assert.equal(byName.outer_ne?.index, 19);
   assert.equal(byName.outer_sw?.index, 16);
   assert.equal(byName.outer_se?.index, 27);
   assert.equal(byName.inner_nw?.index, 4);
@@ -145,7 +145,7 @@ test("a 4x4 sheet and a 4x8 sheet both pass the 15-tileset preset", () => {
   const north = {
     Top: 2, Bottom: 1, Left: 1, Right: 1, TopLeft: 2, TopRight: 2, BottomLeft: 1, BottomRight: 1,
   } satisfies Neighbors;
-  assert.equal(fifteenFixedResolve(north, "4x8").index, 9);
+  assert.equal(fifteenFixedResolve(north, "4x8").index, 18);
 });
 
 test("PixelLab Wang 5x8 binds the fixed index table", () => {
@@ -616,10 +616,10 @@ test("the unity builder slices, binds m_TilingRules, and adds both menus", () =>
   assert.match(script, /case "floor": return 34;/);
   assert.match(script, /case "floor": return 41;/);
   assert.match(script, /case "floor": return 26;/);
-  assert.match(script, /case "outer_nw": return 1;/);
+  assert.match(script, /case "outer_nw": return 56;/);
   assert.match(script, /case "east": return 23;/);
-  assert.match(script, /case "south": return 5;/);
-  assert.match(script, /case "north": return 2;/);
+  assert.match(script, /case "south": return 22;/);
+  assert.match(script, /case "north": return 58;/);
   assert.match(script, /case "west": return 32;/);
   assert.match(script, /case "inner_nw": return 73;/);
   assert.match(script, /case "pillar_top": return 15;/);
@@ -755,12 +755,12 @@ test("Godot 12x8 uses every index and both fill modes", () => {
   assert.equal(byName.corridor_v?.index, 24);
   assert.equal(byName.corridor_v_top?.index, 12);
   assert.equal(byName.corridor_v_bottom?.index, 48);
-  assert.equal(byName.outer_nw?.index, 1);
-  assert.equal(byName.outer_ne?.index, 3);
-  assert.equal(byName.outer_sw?.index, 4);
-  assert.equal(byName.outer_se?.index, 6);
-  assert.equal(byName.north?.index, 2);
-  assert.equal(byName.south?.index, 5);
+  assert.equal(byName.outer_nw?.index, 56);
+  assert.equal(byName.outer_ne?.index, 59);
+  assert.equal(byName.outer_sw?.index, 20);
+  assert.equal(byName.outer_se?.index, 11);
+  assert.equal(byName.north?.index, 58);
+  assert.equal(byName.south?.index, 22);
   assert.equal(byName.west?.index, 32);
   assert.equal(byName.east?.index, 23);
   assert.notEqual(byName.east?.index, 39);
@@ -790,7 +790,7 @@ test("Godot 12x8 uses every index and both fill modes", () => {
   const north = {
     Top: 2, Bottom: 1, Left: 1, Right: 1, TopLeft: 2, TopRight: 2, BottomLeft: 1, BottomRight: 1,
   } satisfies Neighbors;
-  assert.equal(godotFixedResolve(north, "floor").index, 2);
+  assert.equal(godotFixedResolve(north, "floor").index, 58);
 
   const wall = analyzeSheet({ width: 384, height: 256, tileSize: 32, preset: "godot-47", fillMode: "wall" });
   assert.equal(wall.warning, null);
