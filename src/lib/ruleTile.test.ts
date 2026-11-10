@@ -3,17 +3,19 @@ import { test } from "node:test";
 import {
   BLOB,
   DIRECTION_KEYS,
-  FIFTEEN_TILE_MASKS,
-  NATIVE_16_MASKS,
+  FIFTEEN_INDEX,
+  FIFTEEN_PILLAR,
   actualFromCornerMask,
   analyzeSheet,
   buildRuleTileScript,
   canonicalBlobMask,
   countCondition,
   detectPreset,
+  fifteenFixedResolve,
   firstMatchingRule,
   godotCellForMask,
   godotFixedResolve,
+  isFifteenPillar,
   neighborsFromCornerMask,
   ruleMatches,
   suggestPreset,
@@ -38,33 +40,17 @@ import {
   type Neighbors,
 } from "./ruleTile.ts";
 
-test("the 15-tile template packs masks 1-15 into 3 columns", () => {
-  assert.equal(FIFTEEN_TILE_MASKS.length, 15);
-  assert.equal(new Set(FIFTEEN_TILE_MASKS).size, 15);
-  assert.equal(FIFTEEN_TILE_MASKS.includes(0), false);
-  assert.deepEqual([...FIFTEEN_TILE_MASKS].sort((a, b) => a - b), [...Array(15).keys()].map((n) => n + 1));
-  assert.equal(FIFTEEN_TILE_MASKS[6], 15);
-  assert.equal(NATIVE_16_MASKS.length, 16);
-  assert.equal(NATIVE_16_MASKS[12], 0);
-  assert.equal(NATIVE_16_MASKS[6], 15);
-});
-
-test("a filled corner requires the three cells that share it", () => {
-  assert.deepEqual(neighborsFromCornerMask(1), {
-    Top: 1,
-    Bottom: 0,
-    Left: 1,
-    Right: 0,
-    TopLeft: 1,
-    TopRight: 0,
-    BottomLeft: 0,
-    BottomRight: 0,
-  });
+test("PixelLab 15-tileset is a 3x5 sheet and the floor is tile_07", () => {
+  assert.equal(FIFTEEN_INDEX.floor, 7);
+  assert.equal(FIFTEEN_INDEX.defaultSprite, 7);
+  assert.equal(FIFTEEN_INDEX.east, 8);
+  assert.equal(FIFTEEN_PILLAR.includes(2), true);
+  assert.equal(FIFTEEN_PILLAR.includes(3), true);
+  assert.equal(FIFTEEN_PILLAR.includes(13), true);
+  assert.equal(isFifteenPillar(7), false);
   assert.equal(countCondition(neighborsFromCornerMask(15), 1), 8);
   assert.equal(countCondition(neighborsFromCornerMask(0), 1), 0);
-});
 
-test("PixelLab 15-tileset slices a 3x5 sheet and keeps the floor as the default", () => {
   const analysis = analyzeSheet({ width: 96, height: 160, tileSize: 32, preset: "15-tileset" });
   assert.equal(analysis.error, null);
   const data = analysis.data;
@@ -72,43 +58,41 @@ test("PixelLab 15-tileset slices a 3x5 sheet and keeps the floor as the default"
   assert.equal(data.columns, 3);
   assert.equal(data.rows, 5);
   assert.equal(data.tileSize, 32);
-  assert.equal(data.rules.length, 15);
-  assert.equal(data.defaultSpriteIndex, 6);
-  assert.equal(data.cells[6]?.mask, 15);
-  assert.equal(data.cells[6]?.name, "floor");
-  assert.equal(data.rules[0]?.index, 6);
-  assert.equal(countCondition(data.rules[0].neighbors, 1), 8);
-  assert.equal(data.rules.some((rule) => rule.index === data.defaultSpriteIndex), true);
+  assert.equal(data.rules.length, 9);
+  assert.equal(data.defaultSpriteIndex, 7);
+  assert.equal(data.cells[7]?.mask, 15);
+  assert.equal(data.cells[7]?.name, "floor");
+  assert.equal(data.cells[7]?.sprite, "tile_07");
+  assert.equal(data.rules.at(-1)?.index, 7);
+  assert.equal(countCondition(data.rules.at(-1)?.neighbors ?? neighborsFromCornerMask(0), 1), 8);
+  assert.equal(data.rules.some((rule) => rule.index === 15), false);
+  assert.equal(data.rules.some((rule) => isFifteenPillar(rule.index)), false);
+  assert.deepEqual(data.rules.map((rule) => rule.index), [0, 1, 9, 11, 4, 10, 6, 8, 7]);
+  assert.ok(data.rules.findIndex((rule) => rule.name === "outer_nw")
+    < data.rules.findIndex((rule) => rule.name === "north"));
+  assert.ok(data.rules.findIndex((rule) => rule.name === "east")
+    < data.rules.findIndex((rule) => rule.name === "floor"));
+
+  const surrounded = {
+    Top: 1, Bottom: 1, Left: 1, Right: 1, TopLeft: 1, TopRight: 1, BottomLeft: 1, BottomRight: 1,
+  } satisfies Neighbors;
+  assert.equal(fifteenFixedResolve(surrounded).index, 7);
+  assert.equal(firstMatchingRule(data.rules, surrounded), 7);
+  const east = {
+    Top: 1, Bottom: 1, Left: 1, Right: 2, TopLeft: 1, TopRight: 2, BottomLeft: 1, BottomRight: 2,
+  } satisfies Neighbors;
+  assert.equal(fifteenFixedResolve(east).index, 8);
+  const alone = {
+    Top: 2, Bottom: 2, Left: 2, Right: 2, TopLeft: 2, TopRight: 2, BottomLeft: 2, BottomRight: 2,
+  } satisfies Neighbors;
+  assert.equal(fifteenFixedResolve(alone).index, 7);
 });
 
-test("a native 4x4 15-tileset still emits 15 rules in strictest-first order", () => {
+test("a 4-wide sheet is not a PixelLab 15-tileset", () => {
   const analysis = analyzeSheet({ width: 128, height: 128, tileSize: 32, preset: "15-tileset" });
-  assert.equal(analysis.error, null);
-  const data = analysis.data;
-  assert.ok(data);
-  assert.equal(data.doubleHeight, false);
-  assert.equal(data.rules.length, 15);
-  assert.equal(data.rules.some((rule) => countCondition(rule.neighbors, 1) === 0), false);
-  assert.equal(data.rules.some((rule) => rule.index === data.defaultSpriteIndex), false);
-
-  let previous = Infinity;
-  for (const rule of data.rules) {
-    const weight = countCondition(rule.neighbors, 1);
-    assert.ok(weight <= previous);
-    previous = weight;
-    for (const value of Object.values(rule.neighbors)) {
-      assert.ok(value === 0 || value === 1 || value === 2);
-    }
-  }
-
-  const floor = data.rules[0];
-  assert.equal(floor.name, "floor");
-  assert.equal(countCondition(floor.neighbors, 1), 8);
-  const json = JSON.stringify(data);
-  assert.match(json, /"Top":1/);
-  assert.match(json, /"Bottom":/);
-  assert.match(json, /"TopLeft":/);
-  assert.match(json, /"BottomRight":/);
+  assert.equal(analysis.data, null);
+  assert.match(analysis.error ?? "", /3×5/);
+  assert.equal(analysis.error?.includes("4x4"), false);
 });
 
 test("PixelLab Wang 5x8 binds the fixed index table", () => {
@@ -398,29 +382,23 @@ test("Wang 5x8 neighbourhoods stay on the fixed sprites", () => {
 
 test("corner rules resolve the exact mask before any looser subset", () => {
   const wang = analyzeSheet({ width: 160, height: 128, tileSize: 32, preset: "wang" }).data;
-  const native = analyzeSheet({ width: 256, height: 256, tileSize: 64, preset: "15-tileset" }).data;
   const packed = analyzeSheet({ width: 96, height: 160, tileSize: 32, preset: "15-tileset" }).data;
-  assert.ok(wang && native && packed);
+  assert.ok(wang && packed);
 
   for (let mask = 0; mask < 16; mask += 1) {
     const wangHit = firstMatchingRule(wang.rules, actualFromCornerMask(mask));
-    const nativeHit = firstMatchingRule(native.rules, actualFromCornerMask(mask));
-    const packedHit = firstMatchingRule(packed.rules, actualFromCornerMask(mask));
     if (mask === 0) {
       assert.equal(wangHit, null);
-      assert.equal(nativeHit, null);
-      assert.equal(packedHit, null);
       assert.equal(wang.defaultSpriteIndex, 0);
       assert.equal(wangResolve(actualFromCornerMask(0), false).index, 0);
-      assert.equal(native.defaultSpriteIndex, 12);
-      assert.equal(packed.defaultSpriteIndex, FIFTEEN_TILE_MASKS.indexOf(15));
+      assert.equal(packed.defaultSpriteIndex, FIFTEEN_INDEX.floor);
+      assert.equal(fifteenFixedResolve(actualFromCornerMask(0)).index, FIFTEEN_INDEX.floor);
       continue;
     }
     assert.equal(wangHit, mask);
     assert.equal(wangMatchingIndex(actualFromCornerMask(mask), false), mask);
-    assert.equal(nativeHit, NATIVE_16_MASKS.indexOf(mask as (typeof NATIVE_16_MASKS)[number]));
-    assert.equal(packedHit, FIFTEEN_TILE_MASKS.indexOf(mask as (typeof FIFTEEN_TILE_MASKS)[number]));
   }
+  assert.equal(fifteenFixedResolve(actualFromCornerMask(15)).index, FIFTEEN_INDEX.floor);
 });
 
 test("Godot 47-blob rules cover every neighborhood exactly once", () => {
@@ -585,10 +563,10 @@ test("the unity builder slices, binds m_TilingRules, and adds both menus", () =>
   assert.match(script, /case "floor": return 34;/);
   assert.match(script, /case "floor": return 41;/);
   assert.match(script, /case "floor": return 26;/);
-  assert.match(script, /case "outer_nw": return 4;/);
-  assert.match(script, /case "east": return 27;/);
-  assert.match(script, /case "south": return 89;/);
-  assert.match(script, /case "north": return 5;/);
+  assert.match(script, /case "outer_nw": return 21;/);
+  assert.match(script, /case "east": return 47;/);
+  assert.match(script, /case "south": return 58;/);
+  assert.match(script, /case "north": return 22;/);
   assert.match(script, /case "inner_nw": return 73;/);
   assert.match(script, /case "pillar_top": return 15;/);
   assert.match(script, /case "pillar_mid": return 27;/);
@@ -619,8 +597,8 @@ test("the unity builder slices, binds m_TilingRules, and adds both menus", () =>
 
 test("aspect ratio picks the PixelLab preset and leaves a valid choice alone", () => {
   assert.equal(detectPreset(96, 160, 32), "15-tileset");
-  assert.equal(detectPreset(128, 128, 32), "15-tileset");
-  assert.equal(detectPreset(128, 256, 32), "15-tileset");
+  assert.equal(detectPreset(128, 128, 32), null);
+  assert.equal(detectPreset(128, 256, 32), null);
   assert.equal(detectPreset(160, 256, 32), "wang");
   assert.equal(detectPreset(160, 128, 32), "wang");
   assert.equal(detectPreset(384, 128, 32), "godot-47");
@@ -723,19 +701,21 @@ test("Godot 12x8 uses every index and both fill modes", () => {
   assert.equal(byName.corridor_v?.index, 24);
   assert.equal(byName.corridor_v_top?.index, 12);
   assert.equal(byName.corridor_v_bottom?.index, 48);
-  assert.equal(byName.outer_nw?.index, 4);
-  assert.equal(byName.outer_ne?.index, 6);
-  assert.equal(byName.outer_sw?.index, 88);
-  assert.equal(byName.outer_se?.index, 91);
-  assert.equal(byName.north?.index, 5);
-  assert.equal(byName.south?.index, 89);
-  assert.equal(byName.west?.index, 32);
-  assert.equal(byName.east?.index, 27);
+  assert.equal(byName.outer_nw?.index, 21);
+  assert.equal(byName.outer_ne?.index, 23);
+  assert.equal(byName.outer_sw?.index, 57);
+  assert.equal(byName.outer_se?.index, 59);
+  assert.equal(byName.north?.index, 22);
+  assert.equal(byName.south?.index, 58);
+  assert.equal(byName.west?.index, 33);
+  assert.equal(byName.east?.index, 47);
+  assert.notEqual(byName.east?.index, 27);
+  assert.notEqual(byName.east?.index, 35);
   assert.equal(byName.inner_nw?.index, 44);
   assert.equal(byName.inner_ne?.index, 47);
   assert.equal(byName.inner_sw?.index, 20);
   assert.equal(byName.inner_se?.index, 23);
-  assert.equal(floorData.rules.some((rule) => [35, 49, 50, 51, 73, 74, 75].includes(rule.index)), false);
+  assert.equal(floorData.rules.some((rule) => [27, 35, 49, 50, 51, 73, 74, 75].includes(rule.index)), false);
   assert.equal(byName.north?.neighbors.Left, 1);
   assert.equal(byName.north?.neighbors.Right, 1);
 
@@ -751,7 +731,7 @@ test("Godot 12x8 uses every index and both fill modes", () => {
   const north = {
     Top: 2, Bottom: 1, Left: 1, Right: 1, TopLeft: 2, TopRight: 2, BottomLeft: 1, BottomRight: 1,
   } satisfies Neighbors;
-  assert.equal(godotFixedResolve(north, "floor").index, 5);
+  assert.equal(godotFixedResolve(north, "floor").index, 22);
 
   const wall = analyzeSheet({ width: 384, height: 256, tileSize: 32, preset: "godot-47", fillMode: "wall" });
   assert.equal(wall.warning, null);

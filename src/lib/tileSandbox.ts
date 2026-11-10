@@ -1,9 +1,9 @@
 import {
+  fifteenFixedResolve,
+  fifteenRectForIndex,
   godotFixedResolve,
   godotRectForIndex,
   godotSourceRect,
-  pixelLabSourceRect,
-  pixelLabTileIndex,
   terrainOverlays,
   wangRectForIndex,
   wangResolve,
@@ -115,9 +115,8 @@ function layoutTall(layout: SandboxLayout): boolean {
   return false;
 }
 
-function sheetIndexForMask(mask: number, layout: Exclude<SandboxLayout, { kind: "wang" }>): number {
-  if (layout.kind === "godot") return godotSourceRect(mask, 1).index;
-  return pixelLabTileIndex(mask, layout.shape);
+function sheetIndexForMask(mask: number): number {
+  return godotSourceRect(mask, 1).index;
 }
 
 /**
@@ -176,13 +175,13 @@ export function sandboxTileIndex(
   if (layout.kind === "wang") {
     return wangResolve(cellNeighbors(cells, x, y, size), layout.tall, layoutFillMode(layout)).index;
   }
+  if (layout.kind === "fifteen") {
+    return fifteenFixedResolve(cellNeighbors(cells, x, y, size)).index;
+  }
   if (layout.kind === "godot" && layout.tall) {
     return godotFixedResolve(cellNeighbors(cells, x, y, size), layoutFillMode(layout)).index;
   }
-  const mask = layout.kind === "godot"
-    ? blobMaskAt(cells, x, y, size)
-    : cardinalMaskAt(cells, x, y, size);
-  return sheetIndexForMask(mask, layout);
+  return sheetIndexForMask(blobMaskAt(cells, x, y, size));
 }
 
 export function sandboxSourceRect(
@@ -199,16 +198,16 @@ export function sandboxSourceRect(
     const resolved = wangResolve(cellNeighbors(cells, x, y, size), layout.tall, layoutFillMode(layout));
     return { ...wangRectForIndex(resolved.index, tileSize), mask: resolved.mask };
   }
+  if (layout.kind === "fifteen") {
+    const resolved = fifteenFixedResolve(cellNeighbors(cells, x, y, size));
+    return { ...fifteenRectForIndex(resolved.index, tileSize), mask: resolved.mask };
+  }
   if (layout.kind === "godot" && layout.tall) {
     const resolved = godotFixedResolve(cellNeighbors(cells, x, y, size), layoutFillMode(layout));
     return { ...godotRectForIndex(resolved.index, tileSize), mask: resolved.mask };
   }
-  const mask = layout.kind === "godot"
-    ? blobMaskAt(cells, x, y, size)
-    : cardinalMaskAt(cells, x, y, size);
-  const source = layout.kind === "godot"
-    ? godotSourceRect(mask, tileSize)
-    : pixelLabSourceRect(mask, tileSize, layout.shape);
+  const mask = blobMaskAt(cells, x, y, size);
+  const source = godotSourceRect(mask, tileSize);
   return { ...source, mask };
 }
 

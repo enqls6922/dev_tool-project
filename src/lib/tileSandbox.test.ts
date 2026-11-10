@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  FIFTEEN_TILE_MASKS,
+  FIFTEEN_INDEX,
   WANG_5X8_BORDER,
   WANG_5X8_INDEX,
   WANG_TALL_FLOOR_INDEX,
   godotCellForMask,
   godotSourceRect,
+  isFifteenPillar,
   isWang5x8Black,
-  pixelLabTileIndex,
 } from "./ruleTile.ts";
 import {
   CARDINAL,
@@ -22,18 +22,36 @@ import {
   sandboxTileIndex,
 } from "./tileSandbox.ts";
 
-test("every cardinal mask maps onto the 3x5 PixelLab sheet", () => {
-  const seen = new Set<number>();
-  for (let mask = 1; mask < 16; mask += 1) {
-    const index = pixelLabTileIndex(mask);
-    assert.equal(FIFTEEN_TILE_MASKS[index], mask);
-    seen.add(index);
+test("a 3x5 rectangle uses the bright floor and never a pillar", () => {
+  const block = fillRect(emptySandbox(), 2, 2, 5, 4);
+  const at = (x: number, y: number) => sandboxTileIndex(block, x, y);
+  assert.equal(at(3, 3), FIFTEEN_INDEX.floor);
+  assert.equal(at(4, 3), FIFTEEN_INDEX.floor);
+  assert.equal(at(3, 2), FIFTEEN_INDEX.north);
+  assert.equal(at(3, 4), FIFTEEN_INDEX.south);
+  assert.equal(at(2, 3), FIFTEEN_INDEX.west);
+  assert.equal(at(5, 3), FIFTEEN_INDEX.east);
+  assert.equal(at(2, 2), FIFTEEN_INDEX.outerNW);
+  assert.equal(at(5, 2), FIFTEEN_INDEX.outerNE);
+  assert.equal(at(2, 4), FIFTEEN_INDEX.outerSW);
+  assert.equal(at(5, 4), FIFTEEN_INDEX.outerSE);
+  assert.equal(at(3, 3), 7);
+  assert.equal(at(5, 3), 8);
+  for (let y = 2; y <= 4; y += 1) {
+    for (let x = 2; x <= 5; x += 1) {
+      const index = at(x, y);
+      assert.equal(index === null || index <= 14, true);
+      assert.equal(index === 15, false);
+      if (index !== null) assert.equal(isFifteenPillar(index), false);
+    }
   }
-  assert.equal(seen.size, 15);
-  assert.equal(pixelLabTileIndex(0), pixelLabTileIndex(15));
-  assert.equal(pixelLabTileIndex(15), 6);
-  assert.equal(pixelLabTileIndex(0, "4x4"), 12);
-  assert.equal(pixelLabTileIndex(15, "4x4"), 6);
+  const alone = sandboxTileIndex(fillRect(emptySandbox(), 1, 1, 1, 1), 1, 1);
+  assert.equal(alone, 7);
+  const rect = sandboxSourceRect(block, 3, 3, 32);
+  assert.deepEqual(
+    rect && { index: rect.index, x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+    { index: 7, x: 32, y: 64, width: 32, height: 32 },
+  );
 });
 
 test("painting a cell refreshes that cell and its eight neighbors", () => {
@@ -48,8 +66,8 @@ test("painting a cell refreshes that cell and its eight neighbors", () => {
   assert.equal(cardinalMaskAt(cells, 3, 2), CARDINAL.Down);
   assert.equal(cardinalMaskAt(cells, 4, 3), CARDINAL.Left);
   assert.equal(cardinalMaskAt(cells, 0, 0), 0);
-  assert.equal(sandboxTileIndex(cells, 3, 3), pixelLabTileIndex(15));
-  assert.equal(sandboxTileIndex(cells, 3, 2), pixelLabTileIndex(CARDINAL.Down));
+  assert.equal(sandboxTileIndex(cells, 3, 3), FIFTEEN_INDEX.floor);
+  assert.equal(sandboxTileIndex(cells, 3, 2), FIFTEEN_INDEX.floor);
   assert.equal(sandboxTileIndex(cells, 1, 1), null);
 
   const touched = cellsTouchedByEdit(3, 3);
@@ -231,14 +249,16 @@ test("fill mode swaps the Wang and Godot sandbox sprites", () => {
   const wallGodot = { kind: "godot" as const, tall: true, fillMode: "wall" as const };
   const room = fillRect(emptySandbox(), 2, 2, 4, 4);
   assert.equal(sandboxTileIndex(room, 3, 3, 8, floorGodot), 34);
-  assert.equal(sandboxTileIndex(room, 2, 2, 8, floorGodot), 4);
-  assert.equal(sandboxTileIndex(room, 3, 2, 8, floorGodot), 5);
-  assert.equal(sandboxTileIndex(room, 4, 2, 8, floorGodot), 6);
-  assert.equal(sandboxTileIndex(room, 2, 4, 8, floorGodot), 88);
-  assert.equal(sandboxTileIndex(room, 3, 4, 8, floorGodot), 89);
-  assert.equal(sandboxTileIndex(room, 4, 4, 8, floorGodot), 91);
-  assert.equal(sandboxTileIndex(room, 2, 3, 8, floorGodot), 32);
-  assert.equal(sandboxTileIndex(room, 4, 3, 8, floorGodot), 27);
+  assert.equal(sandboxTileIndex(room, 2, 2, 8, floorGodot), 21);
+  assert.equal(sandboxTileIndex(room, 3, 2, 8, floorGodot), 22);
+  assert.equal(sandboxTileIndex(room, 4, 2, 8, floorGodot), 23);
+  assert.equal(sandboxTileIndex(room, 2, 4, 8, floorGodot), 57);
+  assert.equal(sandboxTileIndex(room, 3, 4, 8, floorGodot), 58);
+  assert.equal(sandboxTileIndex(room, 4, 4, 8, floorGodot), 59);
+  assert.equal(sandboxTileIndex(room, 2, 3, 8, floorGodot), 33);
+  assert.equal(sandboxTileIndex(room, 4, 3, 8, floorGodot), 47);
+  assert.notEqual(sandboxTileIndex(room, 4, 3, 8, floorGodot), 27);
+  assert.notEqual(sandboxTileIndex(room, 4, 3, 8, floorGodot), 35);
   assert.equal(sandboxPillarOverlayIndex(room, 2, 1, 8, floorGodot), 85);
   assert.equal(sandboxPillarOverlayIndex(room, 3, 1, 8, floorGodot), 86);
   assert.equal(sandboxPillarOverlayIndex(room, 4, 1, 8, floorGodot), 87);

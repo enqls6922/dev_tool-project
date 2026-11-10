@@ -243,11 +243,9 @@ export function TileSandbox({ previewUrl, tileSize, canSample, layout }: Props) 
                 ? layout.tall
                   ? layout.fillMode === "wall"
                     ? "Godot 12×8 벽 모드입니다. 내부는 tile_41, 세로 기둥은 tile_15·27·63, 남쪽 테두리 아래 빈칸에 기둥을 그립니다."
-                    : "Godot 12×8 바닥 모드입니다. 내부는 tile_34, 직선 테두리는 tile_32·27·05·89, 북쪽 테두리 위 빈칸은 tile_85·86·87입니다."
+                    : "Godot 12×8 바닥 모드입니다. 내부는 tile_34, 직선 테두리는 tile_33·47·22·58, 외곽 코너는 tile_21·23·57·59, 북쪽 테두리 위 빈칸은 tile_85·86·87입니다."
                   : "PixelLab Godot (47-Blob) 12×4 칸을 8방향 이웃과 같은 픽셀 좌표로 그립니다."
-                : layout.shape === "4x4"
-                  ? "15-tileset 4×4 시트의 칸을 마스크와 1:1로 그립니다."
-                  : "15-tileset 3×5 시트의 칸을 마스크와 1:1로 그립니다."
+                : "PixelLab 15-tileset (3×5 시트)입니다. 내부는 tile_07, 외곽은 tile_00·01·04·06·08·09·10·11입니다."
             : "시트가 선택한 프리셋과 맞으면 타일 이미지를 그립니다. 그 전에는 마스크 숫자로 보여 줍니다."}
       </p>
     </section>
