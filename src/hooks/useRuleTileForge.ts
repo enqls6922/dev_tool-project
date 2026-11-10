@@ -14,6 +14,7 @@ import {
   PRESET_INFO,
   analyzeSheet,
   suggestPreset,
+  type FillMode,
   type RulePreset,
   type RuleTileSize,
   type SheetAnalysis,
@@ -21,6 +22,7 @@ import {
 
 export function useRuleTileForge() {
   const [preset, setPresetState] = useState<RulePreset>("godot-47");
+  const [fillMode, setFillModeState] = useState<FillMode>("floor");
   const [tileSize, setTileSizeState] = useState<RuleTileSize>(32);
   const [cleanGhostPixels, setCleanGhostPixelsState] = useState(true);
   const [file, setFile] = useState<File | null>(null);
@@ -57,8 +59,9 @@ export function useRuleTileForge() {
       height: imageSize.height,
       tileSize,
       preset,
+      fillMode,
     });
-  }, [imageSize, tileSize, preset]);
+  }, [imageSize, tileSize, preset, fillMode]);
 
   function releasePreview() {
     if (urlRef.current) URL.revokeObjectURL(urlRef.current);
@@ -147,6 +150,10 @@ export function useRuleTileForge() {
     setPresetState(next);
   }
 
+  function setFillMode(next: FillMode) {
+    setFillModeState(next);
+  }
+
   function setTileSize(next: RuleTileSize) {
     tileSizeRef.current = next;
     setTileSizeState(next);
@@ -190,6 +197,8 @@ export function useRuleTileForge() {
   return {
     preset,
     setPreset,
+    fillMode,
+    setFillMode,
     tileSize,
     setTileSize,
     cleanGhostPixels,

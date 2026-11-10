@@ -204,3 +204,75 @@ test("a Godot sandbox cell samples the 47-blob template", () => {
   assert.equal(outer.x, 8 * 32);
   assert.equal(outer.y, 0);
 });
+
+test("fill mode swaps the Wang and Godot sandbox sprites", () => {
+  const floorWang = { kind: "wang" as const, tall: true, fillMode: "floor" as const };
+  const wallWang = { kind: "wang" as const, tall: true, fillMode: "wall" as const };
+  const block = fillRect(emptySandbox(), 2, 2, 5, 4);
+  assert.equal(sandboxTileIndex(block, 3, 3, 8, floorWang), 16);
+  assert.equal(sandboxTileIndex(block, 3, 3, 8, wallWang), 26);
+  assert.equal(sandboxTileIndex(block, 3, 2, 8, wallWang), 21);
+  assert.equal(sandboxTileIndex(block, 3, 4, 8, wallWang), 11);
+  assert.equal(sandboxTileIndex(block, 2, 3, 8, wallWang), 17);
+  assert.equal(sandboxTileIndex(block, 5, 3, 8, wallWang), 15);
+  assert.equal(sandboxTileIndex(block, 2, 2, 8, wallWang), 24);
+  assert.equal(sandboxTileIndex(block, 5, 2, 8, wallWang), 23);
+  assert.equal(sandboxTileIndex(block, 2, 4, 8, wallWang), 29);
+  assert.equal(sandboxTileIndex(block, 5, 4, 8, wallWang), 28);
+  assert.equal(sandboxPillarOverlayIndex(block, 3, 1, 8, floorWang), 6);
+  assert.equal(sandboxPillarOverlayIndex(block, 3, 1, 8, wallWang), null);
+
+  const column = fillRect(emptySandbox(), 3, 2, 3, 4);
+  assert.equal(sandboxTileIndex(column, 3, 2, 8, wallWang), 6);
+  assert.equal(sandboxTileIndex(column, 3, 3, 8, wallWang), 6);
+  assert.equal(sandboxTileIndex(column, 3, 4, 8, wallWang), 6);
+
+  const floorGodot = { kind: "godot" as const, tall: true, fillMode: "floor" as const };
+  const wallGodot = { kind: "godot" as const, tall: true, fillMode: "wall" as const };
+  const room = fillRect(emptySandbox(), 2, 2, 4, 4);
+  assert.equal(sandboxTileIndex(room, 3, 3, 8, floorGodot), 34);
+  assert.equal(sandboxTileIndex(room, 2, 2, 8, floorGodot), 73);
+  assert.equal(sandboxTileIndex(room, 3, 2, 8, floorGodot), 74);
+  assert.equal(sandboxTileIndex(room, 4, 2, 8, floorGodot), 75);
+  assert.equal(sandboxTileIndex(room, 2, 4, 8, floorGodot), 49);
+  assert.equal(sandboxTileIndex(room, 4, 4, 8, floorGodot), 51);
+  assert.equal(sandboxTileIndex(room, 2, 3, 8, floorGodot), 32);
+  assert.equal(sandboxTileIndex(room, 4, 3, 8, floorGodot), 35);
+  assert.equal(sandboxPillarOverlayIndex(room, 2, 1, 8, floorGodot), 61);
+  assert.equal(sandboxPillarOverlayIndex(room, 3, 1, 8, floorGodot), 62);
+  assert.equal(sandboxPillarOverlayIndex(room, 4, 1, 8, floorGodot), 63);
+  assert.equal(sandboxPillarOverlayIndex(room, 3, 2, 8, floorGodot), null);
+  const cap = sandboxPillarOverlayRect(room, 3, 1, 32, 8, floorGodot);
+  assert.deepEqual(cap, { index: 62, x: 2 * 32, y: 5 * 32, width: 32, height: 32 });
+
+  const hall = fillRect(emptySandbox(), 1, 3, 3, 3);
+  assert.equal(sandboxTileIndex(hall, 1, 3, 8, floorGodot), 1);
+  assert.equal(sandboxTileIndex(hall, 2, 3, 8, floorGodot), 2);
+  assert.equal(sandboxTileIndex(hall, 3, 3, 8, floorGodot), 3);
+  const shaft = fillRect(emptySandbox(), 4, 1, 4, 3);
+  assert.equal(sandboxTileIndex(shaft, 4, 1, 8, floorGodot), 12);
+  assert.equal(sandboxTileIndex(shaft, 4, 2, 8, floorGodot), 24);
+  assert.equal(sandboxTileIndex(shaft, 4, 3, 8, floorGodot), 48);
+
+  assert.equal(sandboxTileIndex(room, 3, 3, 8, wallGodot), 41);
+  assert.equal(sandboxTileIndex(room, 2, 2, 8, wallGodot), 20);
+  assert.equal(sandboxTileIndex(room, 4, 2, 8, wallGodot), 23);
+  assert.equal(sandboxTileIndex(room, 3, 2, 8, wallGodot), 50);
+  assert.equal(sandboxTileIndex(room, 2, 3, 8, wallGodot), 35);
+  assert.equal(sandboxTileIndex(room, 4, 3, 8, wallGodot), 32);
+  assert.equal(sandboxTileIndex(room, 2, 4, 8, wallGodot), 56);
+  assert.equal(sandboxTileIndex(room, 3, 4, 8, wallGodot), 74);
+  assert.equal(sandboxTileIndex(room, 4, 4, 8, wallGodot), 59);
+  assert.equal(sandboxPillarOverlayIndex(room, 2, 5, 8, wallGodot), 61);
+  assert.equal(sandboxPillarOverlayIndex(room, 3, 5, 8, wallGodot), 62);
+  assert.equal(sandboxPillarOverlayIndex(room, 4, 5, 8, wallGodot), 63);
+  assert.equal(sandboxPillarOverlayIndex(room, 3, 1, 8, wallGodot), null);
+
+  const pillar = fillRect(emptySandbox(), 6, 2, 6, 4);
+  assert.equal(sandboxTileIndex(pillar, 6, 2, 8, wallGodot), 15);
+  assert.equal(sandboxTileIndex(pillar, 6, 3, 8, wallGodot), 27);
+  assert.equal(sandboxTileIndex(pillar, 6, 4, 8, wallGodot), 63);
+  const lone = fillRect(emptySandbox(), 0, 0, 0, 0);
+  assert.equal(sandboxTileIndex(lone, 0, 0, 8, floorGodot), 72);
+  assert.equal(sandboxTileIndex(lone, 0, 0, 8, wallGodot), 63);
+});

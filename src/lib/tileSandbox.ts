@@ -1,18 +1,21 @@
 import {
+  godotFixedResolve,
+  godotRectForIndex,
   godotSourceRect,
   pixelLabSourceRect,
   pixelLabTileIndex,
-  wangNorthPillarOverlay,
+  terrainOverlays,
   wangRectForIndex,
   wangResolve,
+  type FillMode,
   type FifteenShape,
   type Neighbors,
 } from "./ruleTile.ts";
 
 export type SandboxLayout =
   | { kind: "fifteen"; shape: FifteenShape }
-  | { kind: "wang"; tall: boolean }
-  | { kind: "godot" };
+  | { kind: "wang"; tall: boolean; fillMode?: FillMode }
+  | { kind: "godot"; tall?: boolean; fillMode?: FillMode };
 
 export const FIFTEEN_LAYOUT: SandboxLayout = { kind: "fifteen", shape: "3x5" };
 
@@ -101,14 +104,26 @@ export function cellNeighbors(
   };
 }
 
+function layoutFillMode(layout: SandboxLayout): FillMode {
+  if (layout.kind === "fifteen") return "floor";
+  return layout.fillMode === "wall" ? "wall" : "floor";
+}
+
+function layoutTall(layout: SandboxLayout): boolean {
+  if (layout.kind === "wang") return layout.tall;
+  if (layout.kind === "godot") return layout.tall === true;
+  return false;
+}
+
 function sheetIndexForMask(mask: number, layout: Exclude<SandboxLayout, { kind: "wang" }>): number {
   if (layout.kind === "godot") return godotSourceRect(mask, 1).index;
   return pixelLabTileIndex(mask, layout.shape);
 }
 
 /**
- * Pillar sprite drawn on an empty cell when the painted cell below is a north lip
- * (tile_10, tile_11, or tile_12). The lip itself stays the terrain sprite.
+ * Pillar sprite drawn on an empty neighbour of a border tile.
+ * Floor mode draws the cap above the north lip. Godot wall mode draws the
+ * foot under the south lip. The painted cell keeps its own terrain sprite.
  */
 export function sandboxPillarOverlayIndex(
   cells: readonly number[],
@@ -117,13 +132,21 @@ export function sandboxPillarOverlayIndex(
   size = SANDBOX_SIZE,
   layout: SandboxLayout = FIFTEEN_LAYOUT,
 ): number | null {
-  if (layout.kind !== "wang" || !layout.tall) return null;
+  if (layout.kind === "fifteen") return null;
   if (x < 0 || y < 0 || x >= size || y >= size) return null;
   if (cells[y * size + x] === 1) return null;
-  if (y + 1 >= size) return null;
-  const below = sandboxTileIndex(cells, x, y + 1, size, layout);
-  if (below === null) return null;
-  return wangNorthPillarOverlay(below);
+  const overlays = terrainOverlays(
+    layout.kind,
+    layoutFillMode(layout),
+    layoutTall(layout),
+  );
+  for (const overlay of overlays) {
+    const sourceY = y - overlay.dy;
+    if (sourceY < 0 || sourceY >= size) continue;
+    const source = sandboxTileIndex(cells, x, sourceY, size, layout);
+    if (source === overlay.source) return overlay.tile;
+  }
+  return null;
 }
 
 export function sandboxPillarOverlayRect(
@@ -136,6 +159,7 @@ export function sandboxPillarOverlayRect(
 ) {
   const index = sandboxPillarOverlayIndex(cells, x, y, size, layout);
   if (index === null) return null;
+  if (layout.kind === "godot" && layout.tall) return godotRectForIndex(index, tileSize);
   return wangRectForIndex(index, tileSize);
 }
 
@@ -150,7 +174,10 @@ export function sandboxTileIndex(
   if (x < 0 || y < 0 || x >= size || y >= size) return null;
   if (cells[y * size + x] !== 1) return null;
   if (layout.kind === "wang") {
-    return wangResolve(cellNeighbors(cells, x, y, size), layout.tall).index;
+    return wangResolve(cellNeighbors(cells, x, y, size), layout.tall, layoutFillMode(layout)).index;
+  }
+  if (layout.kind === "godot" && layout.tall) {
+    return godotFixedResolve(cellNeighbors(cells, x, y, size), layoutFillMode(layout)).index;
   }
   const mask = layout.kind === "godot"
     ? blobMaskAt(cells, x, y, size)
@@ -169,8 +196,12 @@ export function sandboxSourceRect(
   const index = sandboxTileIndex(cells, x, y, size, layout);
   if (index === null) return null;
   if (layout.kind === "wang") {
-    const resolved = wangResolve(cellNeighbors(cells, x, y, size), layout.tall);
+    const resolved = wangResolve(cellNeighbors(cells, x, y, size), layout.tall, layoutFillMode(layout));
     return { ...wangRectForIndex(resolved.index, tileSize), mask: resolved.mask };
+  }
+  if (layout.kind === "godot" && layout.tall) {
+    const resolved = godotFixedResolve(cellNeighbors(cells, x, y, size), layoutFillMode(layout));
+    return { ...godotRectForIndex(resolved.index, tileSize), mask: resolved.mask };
   }
   const mask = layout.kind === "godot"
     ? blobMaskAt(cells, x, y, size)

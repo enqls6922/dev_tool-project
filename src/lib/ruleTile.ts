@@ -8,6 +8,15 @@ export const RULE_PRESETS = ["godot-47", "wang", "15-tileset"] as const;
 
 export type RulePreset = (typeof RULE_PRESETS)[number];
 
+/** Brush fill. Floor paints a bright interior. Wall paints a dark interior. */
+export const FILL_MODES = ["floor", "wall"] as const;
+
+export type FillMode = (typeof FILL_MODES)[number];
+
+export function normalizeFillMode(value: string | null | undefined): FillMode {
+  return value === "wall" ? "wall" : "floor";
+}
+
 export type NeighborValue = 0 | 1 | 2;
 
 /** Unity RuleTile neighbour ids. 0 is absent from m_Neighbors and always passes. */
@@ -60,14 +69,14 @@ export const PRESET_INFO: Record<RulePreset, PresetInfo> = {
     label: "PixelLab Godot (47-Blob)",
     columns: 12,
     rows: 4,
-    hint: "Godot 표준 3×3 Minimal(47-Blob)은 12×4 고정 배열입니다. 칸의 픽셀은 column×타일크기, row×타일크기이고 Unity 47-RuleTile 8방향 룰과 1:1입니다. 24×8 시트는 2×2를 한 타일로 읽습니다.",
+    hint: "12×8(96칸)은 채우기 모드의 고정 인덱스입니다. 바닥 모드는 내부 tile_34, 벽 모드는 내부 tile_41이고 0–95번을 모두 쓸 수 있습니다. 12×4는 Godot 47-Blob, 24×8은 그 시트를 2배 칸으로 읽습니다.",
   },
   wang: {
     id: "wang",
     label: "PixelLab Wang (5×8, 40타일)",
     columns: 5,
     rows: 8,
-    hint: "5×8(160×256, 32px, 40칸)은 고정 인덱스입니다. 기본 스프라이트와 내부 바닥은 tile_16, 북쪽 tile_11, 남쪽 tile_21, 서쪽 tile_15, 동쪽 tile_17, 외곽 코너 tile_10·12·20·22, 안쪽 코너 tile_24·23·29·28, 고립과 세로 통로 하단은 tile_13, 세로 통로는 tile_08·03입니다. 31–34와 36–39는 빈칸이라 룰에 쓰지 않습니다. 5×4는 인덱스 = NW + 2·NE + 4·SW + 8·SE 입니다.",
+    hint: "5×8 바닥 그리기(기본)는 내부 tile_16, 외곽 10·11·12·15·17·20·21·22, 안쪽 코너 23·24·28·29입니다. 벽 그리기는 내부를 tile_26, 1칸 기둥을 tile_06으로 두고 테두리 스프라이트를 바닥 모드의 반대 역할로 바꿉니다. 31–34와 36–39는 빈칸입니다. 5×4는 인덱스 = NW + 2·NE + 4·SW + 8·SE 입니다.",
   },
 };
 
@@ -197,6 +206,30 @@ export const WANG_5X8_PILLAR_OVERLAY = {
   12: 7,
 } as const;
 
+/**
+ * Wall-draw mode. The painted blob uses the same neighbour tests as floor mode.
+ * Each border sprite is the floor-mode sprite of the opposite role, so the
+ * painted cells read as the dark wall instead of the bright floor.
+ * Interior is tile_26. A 1-cell-wide vertical run is the pillar tile_06.
+ */
+export const WANG_5X8_WALL_INDEX = {
+  fill: 26,
+  defaultSprite: 26,
+  pillar: 6,
+  north: 21,
+  south: 11,
+  west: 17,
+  east: 15,
+  outerNW: 24,
+  outerNE: 23,
+  outerSW: 29,
+  outerSE: 28,
+  innerNW: 10,
+  innerNE: 12,
+  innerSW: 20,
+  innerSE: 22,
+} as const;
+
 /** Sprites a solid 5×8 rectangle may use on its outer border. */
 export const WANG_5X8_BORDER = [10, 11, 12, 15, 17, 20, 21, 22] as const;
 
@@ -307,7 +340,94 @@ export function wangRectForIndex(index: number, tileSize: number) {
 /** Godot 3×3 minimal / PixelLab Godot sheet. 12×4 template, one cell unused. */
 export const GODOT_COLUMNS = 12;
 export const GODOT_ROWS = 4;
+export const GODOT_FULL_ROWS = 8;
+export const GODOT_CELL_COUNT = GODOT_COLUMNS * GODOT_FULL_ROWS;
 export const GODOT_FULL_MASK = 255;
+
+/**
+ * PixelLab Godot 12×8 floor mode. Painted = 1, empty = 2.
+ * Outer corners are listed before straight edges. Indices run through 0–95.
+ */
+export const GODOT_FLOOR_INDEX = {
+  floor: 34,
+  single: 72,
+  corridorH: 2,
+  corridorHLeft: 1,
+  corridorHRight: 3,
+  corridorV: 24,
+  corridorVTop: 12,
+  corridorVBottom: 48,
+  outerNW: 73,
+  outerNE: 75,
+  outerSW: 49,
+  outerSE: 51,
+  north: 74,
+  south: 50,
+  west: 32,
+  east: 35,
+  innerNW: 20,
+  innerNE: 23,
+  innerSW: 56,
+  innerSE: 59,
+} as const;
+
+/** Wall mode. Interior is the dark fill. Border sprites swap with floor mode. */
+export const GODOT_WALL_INDEX = {
+  fill: 41,
+  single: 63,
+  pillarTop: 15,
+  pillarMid: 27,
+  pillarBottom: 63,
+  outerNW: 20,
+  outerNE: 23,
+  outerSW: 56,
+  outerSE: 59,
+  north: 50,
+  south: 74,
+  west: 35,
+  east: 32,
+  innerNW: 73,
+  innerNE: 75,
+  innerSW: 49,
+  innerSE: 51,
+} as const;
+
+export type SpriteOverlay = {
+  source: number;
+  tile: number;
+  /** Empty cell minus the painted cell. -1 is the cell above. */
+  dy: -1 | 1;
+};
+
+export const WANG_FLOOR_OVERLAYS: readonly SpriteOverlay[] = [
+  { source: 10, tile: 5, dy: -1 },
+  { source: 11, tile: 6, dy: -1 },
+  { source: 12, tile: 7, dy: -1 },
+];
+
+/** Caps drawn on the empty cell above a floor-mode north lip (73, 74, 75). */
+export const GODOT_FLOOR_OVERLAYS: readonly SpriteOverlay[] = [
+  { source: 73, tile: 61, dy: -1 },
+  { source: 74, tile: 62, dy: -1 },
+  { source: 75, tile: 63, dy: -1 },
+];
+
+/** Pillar feet drawn on the empty cell below a wall-mode south lip. */
+export const GODOT_WALL_OVERLAYS: readonly SpriteOverlay[] = [
+  { source: 56, tile: 61, dy: 1 },
+  { source: 74, tile: 62, dy: 1 },
+  { source: 59, tile: 63, dy: 1 },
+];
+
+export function terrainOverlays(
+  kind: "wang" | "godot",
+  fillMode: FillMode,
+  tall: boolean,
+): readonly SpriteOverlay[] {
+  if (!tall) return [];
+  if (kind === "wang") return fillMode === "floor" ? WANG_FLOOR_OVERLAYS : [];
+  return fillMode === "wall" ? GODOT_WALL_OVERLAYS : GODOT_FLOOR_OVERLAYS;
+}
 
 /** 8-direction blob bits. A corner counts only when both adjacent sides are set. */
 export const BLOB = {
@@ -379,6 +499,24 @@ export function godotSourceRect(mask: number, tileSize: number) {
   };
 }
 
+export function godotRectForIndex(index: number, tileSize: number) {
+  if (!Number.isInteger(tileSize) || tileSize <= 0) {
+    throw new Error("타일 크기는 양의 정수여야 합니다.");
+  }
+  if (!Number.isInteger(index) || index < 0 || index >= GODOT_CELL_COUNT) {
+    throw new Error("Godot 12×8 시트에 없는 칸입니다.");
+  }
+  const column = index % GODOT_COLUMNS;
+  const row = Math.floor(index / GODOT_COLUMNS);
+  return {
+    index,
+    x: column * tileSize,
+    y: row * tileSize,
+    width: tileSize,
+    height: tileSize,
+  };
+}
+
 export function neighborsFromBlobMask(mask: number): Neighbors {
   const canonical = canonicalBlobMask(mask);
   const side = (bit: number): NeighborValue => ((canonical & bit) !== 0 ? 1 : 2);
@@ -402,6 +540,7 @@ const PRESET_SHAPES: readonly { preset: RulePreset; columns: number; rows: numbe
   { preset: "15-tileset", columns: 3, rows: 5 },
   { preset: "15-tileset", columns: 4, rows: 4 },
   { preset: "15-tileset", columns: 4, rows: 8 },
+  { preset: "godot-47", columns: 12, rows: 8 },
   { preset: "godot-47", columns: 12, rows: 4 },
   { preset: "godot-47", columns: 24, rows: 8 },
   { preset: "wang", columns: 5, rows: 8 },
@@ -487,6 +626,8 @@ export type RuleDataFile = {
   version: 1;
   kind: "unity-rule-tile";
   preset: RulePreset;
+  /** floor paints a bright interior. wall paints a dark interior. */
+  fillMode: FillMode;
   tileSize: number;
   image: "Tileset.png";
   columns: number;
@@ -758,55 +899,224 @@ function wangFixedSlot(
  * other seven neighbours filled so two gaps fall through to tile_16.
  * tile_13 is both the isolated cell and the bottom of a 1-wide vertical corridor.
  */
-function wangFixedSlots(): Slot[] {
+function wangBorderSlots(
+  index: {
+    single: number;
+    corridorNS: number;
+    corridorNSTop: number;
+    corridorNSBottom: number;
+    outerNW: number;
+    outerNE: number;
+    outerSW: number;
+    outerSE: number;
+    north: number;
+    south: number;
+    west: number;
+    east: number;
+    innerNW: number;
+    innerNE: number;
+    innerSW: number;
+    innerSE: number;
+    floor: number;
+  },
+  labels: { single: string; corridor: string; corridorTop: string; corridorBottom: string; floor: string },
+): Slot[] {
   const floor = neighborsFromCornerMask(15);
   return [
-    wangFixedSlot(WANG_5X8_INDEX.single, "single", "고립 단독", 0, wangNeighbors({
+    wangFixedSlot(index.single, "single", labels.single, 0, wangNeighbors({
       Top: 2, Bottom: 2, Left: 2, Right: 2,
     })),
-    wangFixedSlot(WANG_5X8_INDEX.corridorNS, "corridor_ns", "세로 1칸 폭 통로", 5, wangNeighbors({
+    wangFixedSlot(index.corridorNS, "corridor_ns", labels.corridor, 5, wangNeighbors({
       Left: 2, Right: 2, Top: 1, Bottom: 1,
     })),
-    wangFixedSlot(WANG_5X8_INDEX.corridorNSTop, "corridor_ns_top", "세로 1칸 통로 상단", 4, wangNeighbors({
+    wangFixedSlot(index.corridorNSTop, "corridor_ns_top", labels.corridorTop, 4, wangNeighbors({
       Left: 2, Right: 2, Top: 2, Bottom: 1,
     })),
-    wangFixedSlot(WANG_5X8_INDEX.corridorNSBottom, "corridor_ns_bottom", "세로 1칸 통로 하단", 1, wangNeighbors({
+    wangFixedSlot(index.corridorNSBottom, "corridor_ns_bottom", labels.corridorBottom, 1, wangNeighbors({
       Left: 2, Right: 2, Top: 1, Bottom: 2,
     })),
-    wangFixedSlot(WANG_5X8_INDEX.outerNW, "outer_nw", "북서 외곽 코너", 6, wangNeighbors({
+    wangFixedSlot(index.outerNW, "outer_nw", "북서 외곽 코너", 6, wangNeighbors({
       Top: 2, Left: 2, Right: 1, Bottom: 1,
     })),
-    wangFixedSlot(WANG_5X8_INDEX.outerNE, "outer_ne", "북동 외곽 코너", 12, wangNeighbors({
+    wangFixedSlot(index.outerNE, "outer_ne", "북동 외곽 코너", 12, wangNeighbors({
       Top: 2, Right: 2, Left: 1, Bottom: 1,
     })),
-    wangFixedSlot(WANG_5X8_INDEX.outerSW, "outer_sw", "남서 외곽 코너", 3, wangNeighbors({
+    wangFixedSlot(index.outerSW, "outer_sw", "남서 외곽 코너", 3, wangNeighbors({
       Bottom: 2, Left: 2, Right: 1, Top: 1,
     })),
-    wangFixedSlot(WANG_5X8_INDEX.outerSE, "outer_se", "남동 외곽 코너", 9, wangNeighbors({
+    wangFixedSlot(index.outerSE, "outer_se", "남동 외곽 코너", 9, wangNeighbors({
       Bottom: 2, Right: 2, Left: 1, Top: 1,
     })),
-    wangFixedSlot(WANG_5X8_INDEX.north, "north", "북쪽 상단 테두리", 14, wangNeighbors({
+    wangFixedSlot(index.north, "north", "북쪽 상단 테두리", 14, wangNeighbors({
       Top: 2, Bottom: 1, Left: 1, Right: 1,
     })),
-    wangFixedSlot(WANG_5X8_INDEX.south, "south", "남쪽 하단 테두리", 11, wangNeighbors({
+    wangFixedSlot(index.south, "south", "남쪽 하단 테두리", 11, wangNeighbors({
       Bottom: 2, Top: 1, Left: 1, Right: 1,
     })),
-    wangFixedSlot(WANG_5X8_INDEX.west, "west", "서쪽 좌측 테두리", 7, wangNeighbors({
+    wangFixedSlot(index.west, "west", "서쪽 좌측 테두리", 7, wangNeighbors({
       Left: 2, Right: 1, Top: 1, Bottom: 1,
     })),
-    wangFixedSlot(WANG_5X8_INDEX.east, "east", "동쪽 우측 테두리", 13, wangNeighbors({
+    wangFixedSlot(index.east, "east", "동쪽 우측 테두리", 13, wangNeighbors({
       Right: 2, Left: 1, Top: 1, Bottom: 1,
     })),
-    wangFixedSlot(WANG_5X8_INDEX.innerNW, "inner_nw", "북서 안쪽 코너", 15, wangInner("TopLeft")),
-    wangFixedSlot(WANG_5X8_INDEX.innerNE, "inner_ne", "북동 안쪽 코너", 15, wangInner("TopRight")),
-    wangFixedSlot(WANG_5X8_INDEX.innerSW, "inner_sw", "남서 안쪽 코너", 15, wangInner("BottomLeft")),
-    wangFixedSlot(WANG_5X8_INDEX.innerSE, "inner_se", "남동 안쪽 코너", 15, wangInner("BottomRight")),
-    wangFixedSlot(WANG_5X8_INDEX.floor, "floor", "내부 바닥", 15, floor, true),
+    wangFixedSlot(index.innerNW, "inner_nw", "북서 안쪽 코너", 15, wangInner("TopLeft")),
+    wangFixedSlot(index.innerNE, "inner_ne", "북동 안쪽 코너", 15, wangInner("TopRight")),
+    wangFixedSlot(index.innerSW, "inner_sw", "남서 안쪽 코너", 15, wangInner("BottomLeft")),
+    wangFixedSlot(index.innerSE, "inner_se", "남동 안쪽 코너", 15, wangInner("BottomRight")),
+    wangFixedSlot(index.floor, "floor", labels.floor, 15, floor, true),
   ];
 }
 
-function wangSlots(tall: boolean): Slot[] {
-  if (tall) return wangFixedSlots();
+function wangFixedSlots(fillMode: FillMode): Slot[] {
+  if (fillMode === "wall") {
+    const pillar = WANG_5X8_WALL_INDEX.pillar;
+    return wangBorderSlots({
+      ...WANG_5X8_WALL_INDEX,
+      floor: WANG_5X8_WALL_INDEX.fill,
+      single: pillar,
+      corridorNS: pillar,
+      corridorNSTop: pillar,
+      corridorNSBottom: pillar,
+    }, {
+      single: "고립 기둥",
+      corridor: "세로 기둥 중단",
+      corridorTop: "세로 기둥 상단",
+      corridorBottom: "세로 기둥 하단",
+      floor: "내부 벽",
+    });
+  }
+  return wangBorderSlots(WANG_5X8_INDEX, {
+    single: "고립 단독",
+    corridor: "세로 1칸 폭 통로",
+    corridorTop: "세로 1칸 통로 상단",
+    corridorBottom: "세로 1칸 통로 하단",
+    floor: "내부 바닥",
+  });
+}
+
+function cardinals(patch: Partial<Neighbors>): Neighbors {
+  return wangNeighbors(patch);
+}
+
+/**
+ * 12×8 floor rules. Check order is the first match:
+ * isolated tile, 1-wide corridors, outer corners, straight edges, one inner gap, floor.
+ */
+function godotFloorSlots(): Slot[] {
+  const index = GODOT_FLOOR_INDEX;
+  const floor = neighborsFromCornerMask(15);
+  return [
+    wangFixedSlot(index.single, "single", "고립 단독", 0, cardinals({
+      Top: 2, Bottom: 2, Left: 2, Right: 2,
+    })),
+    wangFixedSlot(index.corridorH, "corridor_h", "가로 1칸 폭 통로", 10, cardinals({
+      Left: 1, Right: 1, Top: 2, Bottom: 2,
+    })),
+    wangFixedSlot(index.corridorHLeft, "corridor_h_left", "가로 통로 좌끝", 8, cardinals({
+      Left: 2, Right: 1, Top: 2, Bottom: 2,
+    })),
+    wangFixedSlot(index.corridorHRight, "corridor_h_right", "가로 통로 우끝", 2, cardinals({
+      Left: 1, Right: 2, Top: 2, Bottom: 2,
+    })),
+    wangFixedSlot(index.corridorV, "corridor_v", "세로 1칸 폭 통로", 5, cardinals({
+      Top: 1, Bottom: 1, Left: 2, Right: 2,
+    })),
+    wangFixedSlot(index.corridorVTop, "corridor_v_top", "세로 통로 상단", 4, cardinals({
+      Top: 2, Bottom: 1, Left: 2, Right: 2,
+    })),
+    wangFixedSlot(index.corridorVBottom, "corridor_v_bottom", "세로 통로 하단", 1, cardinals({
+      Top: 1, Bottom: 2, Left: 2, Right: 2,
+    })),
+    wangFixedSlot(index.outerNW, "outer_nw", "북서 외곽 코너", 6, cardinals({
+      Top: 2, Left: 2, Right: 1, Bottom: 1,
+    })),
+    wangFixedSlot(index.outerNE, "outer_ne", "북동 외곽 코너", 12, cardinals({
+      Top: 2, Right: 2, Left: 1, Bottom: 1,
+    })),
+    wangFixedSlot(index.outerSW, "outer_sw", "남서 외곽 코너", 3, cardinals({
+      Bottom: 2, Left: 2, Right: 1, Top: 1,
+    })),
+    wangFixedSlot(index.outerSE, "outer_se", "남동 외곽 코너", 9, cardinals({
+      Bottom: 2, Right: 2, Left: 1, Top: 1,
+    })),
+    wangFixedSlot(index.north, "north", "북쪽 상단 테두리", 14, cardinals({
+      Top: 2, Bottom: 1, Left: 1, Right: 1,
+    })),
+    wangFixedSlot(index.south, "south", "남쪽 하단 테두리", 11, cardinals({
+      Bottom: 2, Top: 1, Left: 1, Right: 1,
+    })),
+    wangFixedSlot(index.west, "west", "서쪽 좌측 테두리", 7, cardinals({
+      Left: 2, Right: 1, Top: 1, Bottom: 1,
+    })),
+    wangFixedSlot(index.east, "east", "동쪽 우측 테두리", 13, cardinals({
+      Right: 2, Left: 1, Top: 1, Bottom: 1,
+    })),
+    wangFixedSlot(index.innerNW, "inner_nw", "북서 안쪽 코너", 15, wangInner("TopLeft")),
+    wangFixedSlot(index.innerNE, "inner_ne", "북동 안쪽 코너", 15, wangInner("TopRight")),
+    wangFixedSlot(index.innerSW, "inner_sw", "남서 안쪽 코너", 15, wangInner("BottomLeft")),
+    wangFixedSlot(index.innerSE, "inner_se", "남동 안쪽 코너", 15, wangInner("BottomRight")),
+    wangFixedSlot(index.floor, "floor", "내부 바닥", 15, floor, true),
+  ];
+}
+
+/**
+ * 12×8 wall rules. Outer corners and 1-wide pillars are checked before the
+ * looser straight edges, which name only the facing pair.
+ */
+function godotWallSlots(): Slot[] {
+  const index = GODOT_WALL_INDEX;
+  const floor = neighborsFromCornerMask(15);
+  return [
+    wangFixedSlot(index.innerNW, "inner_nw", "북서 안쪽 코너", 15, wangInner("TopLeft")),
+    wangFixedSlot(index.innerNE, "inner_ne", "북동 안쪽 코너", 15, wangInner("TopRight")),
+    wangFixedSlot(index.innerSW, "inner_sw", "남서 안쪽 코너", 15, wangInner("BottomLeft")),
+    wangFixedSlot(index.innerSE, "inner_se", "남동 안쪽 코너", 15, wangInner("BottomRight")),
+    wangFixedSlot(index.outerNW, "outer_nw", "북서 외곽 코너", 6, cardinals({
+      Top: 2, Left: 2, Right: 1, Bottom: 1,
+    })),
+    wangFixedSlot(index.outerNE, "outer_ne", "북동 외곽 코너", 12, cardinals({
+      Top: 2, Right: 2, Left: 1, Bottom: 1,
+    })),
+    wangFixedSlot(index.outerSW, "outer_sw", "남서 외곽 코너", 3, cardinals({
+      Bottom: 2, Left: 2, Right: 1, Top: 1,
+    })),
+    wangFixedSlot(index.outerSE, "outer_se", "남동 외곽 코너", 9, cardinals({
+      Bottom: 2, Right: 2, Left: 1, Top: 1,
+    })),
+    wangFixedSlot(index.pillarTop, "pillar_top", "세로 기둥 상단", 4, cardinals({
+      Top: 2, Bottom: 1, Left: 2, Right: 2,
+    })),
+    wangFixedSlot(index.pillarMid, "pillar_mid", "세로 기둥 중단", 5, cardinals({
+      Top: 1, Bottom: 1, Left: 2, Right: 2,
+    })),
+    wangFixedSlot(index.pillarBottom, "pillar_bottom", "세로 기둥 하단", 1, cardinals({
+      Top: 1, Bottom: 2, Left: 2, Right: 2,
+    })),
+    wangFixedSlot(index.single, "single", "세로 기둥 단독", 0, cardinals({
+      Top: 2, Bottom: 2, Left: 2, Right: 2,
+    })),
+    wangFixedSlot(index.north, "north", "북쪽 상단 테두리", 14, cardinals({
+      Top: 2, Bottom: 1,
+    })),
+    wangFixedSlot(index.south, "south", "남쪽 하단 테두리", 11, cardinals({
+      Bottom: 2, Top: 1,
+    })),
+    wangFixedSlot(index.west, "west", "서쪽 좌측 테두리", 7, cardinals({
+      Left: 2, Right: 1,
+    })),
+    wangFixedSlot(index.east, "east", "동쪽 우측 테두리", 13, cardinals({
+      Right: 2, Left: 1,
+    })),
+    wangFixedSlot(index.fill, "floor", "내부 벽", 15, floor, true),
+  ];
+}
+
+function godotFixedSlots(fillMode: FillMode): Slot[] {
+  return fillMode === "wall" ? godotWallSlots() : godotFloorSlots();
+}
+
+function wangSlots(tall: boolean, fillMode: FillMode = "floor"): Slot[] {
+  if (tall) return wangFixedSlots(fillMode);
   const slots: Slot[] = [];
   for (let mask = 0; mask <= 15; mask += 1) {
     const index = wangSurfaceIndex(mask, false);
@@ -845,29 +1155,52 @@ function orderedRules(slots: Slot[], preserveOrder = false): RuleEntry[] {
 }
 
 /** Unity's first matching rule index, or null when the default sprite applies. */
-export function wangMatchingIndex(actual: Neighbors, tall: boolean): number | null {
-  return firstMatchingRule(orderedRules(wangSlots(tall), tall), actual);
+export function wangMatchingIndex(actual: Neighbors, tall: boolean, fillMode: FillMode = "floor"): number | null {
+  return firstMatchingRule(orderedRules(wangSlots(tall, fillMode), tall), actual);
 }
 
 /**
  * Rule sprite for this neighbourhood.
- * A 5×8 miss is tile_16. Wall graphics and empty cells are rejected.
+ * A 5×8 miss is the mode's interior sprite. Empty cells are rejected.
+ * Floor mode also rejects the wall-header graphics.
  */
-export function wangResolve(actual: Neighbors, tall: boolean): { index: number; mask: number } {
-  const rules = orderedRules(wangSlots(tall), tall);
+export function wangResolve(
+  actual: Neighbors,
+  tall: boolean,
+  fillMode: FillMode = "floor",
+): { index: number; mask: number } {
+  const rules = orderedRules(wangSlots(tall, fillMode), tall);
   for (const rule of rules) {
     if (!ruleMatches(rule.neighbors, actual)) continue;
-    return tall ? guardWang5x8Sprite(rule.index, rule.mask) : { index: rule.index, mask: rule.mask };
+    return tall ? guardWang5x8Sprite(rule.index, rule.mask, fillMode) : { index: rule.index, mask: rule.mask };
   }
-  if (tall) return { index: WANG_TALL_FLOOR_INDEX, mask: 15 };
+  if (tall) {
+    const index = fillMode === "wall" ? WANG_5X8_WALL_INDEX.fill : WANG_TALL_FLOOR_INDEX;
+    return { index, mask: 15 };
+  }
   return { index: 0, mask: 0 };
 }
 
-function guardWang5x8Sprite(index: number, mask: number): { index: number; mask: number } {
-  if (WANG_5X8_WALL_SET.has(index) || isWang5x8Black(index)) {
-    return { index: WANG_TALL_FLOOR_INDEX, mask: 15 };
-  }
+function guardWang5x8Sprite(
+  index: number,
+  mask: number,
+  fillMode: FillMode,
+): { index: number; mask: number } {
+  const fallback = fillMode === "wall" ? WANG_5X8_WALL_INDEX.fill : WANG_TALL_FLOOR_INDEX;
+  const blockedGraphic = WANG_5X8_WALL_SET.has(index) && !(fillMode === "wall" && index === WANG_5X8_WALL_INDEX.pillar);
+  if (blockedGraphic || isWang5x8Black(index)) return { index: fallback, mask: 15 };
   return { index, mask };
+}
+
+/** First matching 12×8 Godot sprite. A miss uses the mode's interior tile. */
+export function godotFixedResolve(actual: Neighbors, fillMode: FillMode = "floor"): { index: number; mask: number } {
+  const rules = orderedRules(godotFixedSlots(fillMode), true);
+  for (const rule of rules) {
+    if (!ruleMatches(rule.neighbors, actual)) continue;
+    return { index: rule.index, mask: rule.mask };
+  }
+  const index = fillMode === "wall" ? GODOT_WALL_INDEX.fill : GODOT_FLOOR_INDEX.floor;
+  return { index, mask: 15 };
 }
 
 function cloneNeighbors(neighbors: Neighbors): Neighbors {
@@ -879,6 +1212,7 @@ export function analyzeSheet(input: {
   height: number;
   tileSize: number;
   preset: RulePreset;
+  fillMode?: FillMode;
 }): SheetAnalysis {
   const empty: SheetAnalysis = { columns: 0, rows: 0, cells: [], data: null, error: null, warning: null };
   if (!Number.isInteger(input.tileSize) || input.tileSize <= 0) {
@@ -919,9 +1253,14 @@ export function analyzeSheet(input: {
     shape = found;
     mappedRows = found === "3x5" ? FIFTEEN_ROWS : 4;
   } else if (input.preset === "godot-47") {
-    const doubledSheet = baseColumns === GODOT_COLUMNS * 2 && baseRows >= GODOT_ROWS * 2
+    const fullSheet = baseColumns === GODOT_COLUMNS && baseRows >= GODOT_FULL_ROWS;
+    const doubledSheet = !fullSheet
+      && baseColumns === GODOT_COLUMNS * 2
+      && baseRows >= GODOT_ROWS * 2
       && input.height % (input.tileSize * 2) === 0;
-    if (doubledSheet) {
+    if (fullSheet) {
+      mappedRows = GODOT_FULL_ROWS;
+    } else if (doubledSheet) {
       sliceSize = input.tileSize * 2;
       columns = input.width / sliceSize;
       rows = input.height / sliceSize;
@@ -936,7 +1275,7 @@ export function analyzeSheet(input: {
         cells,
         data: null,
         warning: null,
-        error: `PixelLab Godot 47-Blob은 12×4 템플릿이거나 기본 칸 24×8 시트입니다. 이 시트는 ${baseColumns}×${baseRows}칸입니다.`,
+        error: `PixelLab Godot은 12×8 고정 시트, 12×4 47-Blob, 또는 기본 칸 24×8 시트입니다. 이 시트는 ${baseColumns}×${baseRows}칸입니다.`,
       };
     }
   } else if (baseColumns !== WANG_COLUMNS) {
@@ -966,7 +1305,13 @@ export function analyzeSheet(input: {
   const cells = sliceSheet(input.width, input.height, sliceSize);
   const base = { columns, rows, cells, data: null, warning: null };
   const tallWang = input.preset === "wang" && wangEdgeBand(mappedRows);
-  const slots = input.preset === "wang" ? wangSlots(tallWang) : slotsForPreset(input.preset, shape);
+  const fullGodot = input.preset === "godot-47" && columns === GODOT_COLUMNS && mappedRows >= GODOT_FULL_ROWS;
+  const fillMode: FillMode = (tallWang || fullGodot) && input.fillMode === "wall" ? "wall" : "floor";
+  const slots = input.preset === "wang"
+    ? wangSlots(tallWang, fillMode)
+    : fullGodot
+      ? godotFixedSlots(fillMode)
+      : slotsForPreset(input.preset, shape);
   const slotByIndex = new Map<number, Slot>();
   for (const slot of slots) {
     if (!slotByIndex.has(slot.index)) slotByIndex.set(slot.index, slot);
@@ -985,7 +1330,7 @@ export function analyzeSheet(input: {
         ...cell,
         sprite: tileSpriteName(cell.index),
         name: black ? "black" : "unmapped",
-        label: black ? "검은 빈칸" : tallWang && inside ? "미사용" : "범위 밖",
+        label: black ? "검은 빈칸" : inside ? "미사용" : "범위 밖",
         mask: -1,
         role: "unmapped",
         fallback: false,
@@ -1004,7 +1349,7 @@ export function analyzeSheet(input: {
     };
   });
 
-  const rules = orderedRules(slots, tallWang);
+  const rules = orderedRules(slots, tallWang || fullGodot);
 
   const warning = rows > mappedRows
     ? `세로가 ${rows}칸입니다. 위쪽 ${mappedRows}줄만 룰에 넣습니다.`
@@ -1021,6 +1366,7 @@ export function analyzeSheet(input: {
       version: 1,
       kind: "unity-rule-tile",
       preset: input.preset,
+      fillMode,
       tileSize: sliceSize,
       image: "Tileset.png",
       columns,
@@ -1048,31 +1394,46 @@ export function buildRuleTileScript(): string {
 // 2. outer corners
 // 3. straight edges (all four cardinals specified)
 // 4. one inner diagonal gap
-// 5. full floor. Anything else uses the default sprite, also tile_16.
+// 5. full interior. Anything else uses the default sprite.
 // 15-tileset rules mark the three cells around each filled corner as This and leave
 // the rest Ignore, with stricter rules first.
 // PixelLab 15-tileset is 3 columns by 5 rows (indices 0-14). A native 4x4 or 4x8
 // sheet is accepted too and keeps the 16-role order.
 // Wang sheets are 5 columns of square cells. On a 5x4 sheet the index is the mask
 // (NW + 2*NE + 4*SW + 8*SE), so tile 15 is the floor and tile 0 is the default.
-// A 5x8 sheet (160x256, 40 cells) uses the fixed index table below. The builder
-// rebinds those rule names onto these sprites and refuses the empty cells.
-//   floor / default sprite          tile_16
-//   single / corridor bottom        tile_13
-//   vertical corridor               tile_08
-//   vertical corridor top           tile_03
-//   north / south / west / east     tile_11, tile_21, tile_15, tile_17
-//   outer NW / NE / SW / SE         tile_10, tile_12, tile_20, tile_22
-//   inner NW / NE / SW / SE         tile_24, tile_23, tile_29, tile_28
+// RuleData.json fillMode is "floor" or "wall". The builder rebinds rule names
+// onto the sprites for that mode. "floor" is the bright room. "wall" inverts
+// the border sprites so the painted cells are the dark wall.
+//   floor mode interior / default   tile_16
+//   floor single / corridor bottom  tile_13
+//   floor vertical corridor         tile_08
+//   floor vertical corridor top     tile_03
+//   floor north / south / west / east   tile_11, tile_21, tile_15, tile_17
+//   floor outer NW / NE / SW / SE   tile_10, tile_12, tile_20, tile_22
+//   floor inner NW / NE / SW / SE   tile_24, tile_23, tile_29, tile_28
+//   wall mode interior / default    tile_26
+//   wall pillar (single and shaft)  tile_06
+//   wall borders are the floor-mode sprites of the opposite role
 //   black, never a rule             tile_31 tile_32 tile_33 tile_34 tile_36 tile_37 tile_38 tile_39
-// tile_00, tile_01, tile_02 and tile_05, tile_06, tile_07 are the north wall
-// header and pillar faces. They are not terrain rules.
+// tile_00, tile_01, tile_02 and tile_05, tile_07 are wall graphics. Floor mode
+// does not use them as terrain rules. Wall mode uses tile_06 as the pillar.
 // doubleHeight stays false; each rule samples one square cell.
-// Godot 47-blob is the fixed 12x4 3x3-minimal template (47 rules). A cell's pixels
-// are column * tileSize, row * tileSize. A PixelLab Godot download that is 24x8
-// base cells is sliced as that template at twice the tile size.
-// Each rule sets the four sides to This or NotThis. A diagonal is This or NotThis
-// only when both adjacent sides are This; otherwise the corner is Ignore.
+// Godot 12x4 is the 47-blob template (47 rules). A 12x8 sheet uses every index
+// from 0 through 95 and the fillMode tables below. A 24x8 download is the
+// 12x4 template at twice the tile size.
+//   floor interior                  tile_34
+//   floor single                    tile_72
+//   floor corridors                 tile_02 tile_01 tile_03 tile_24 tile_12 tile_48
+//   floor outer NW/NE/SW/SE         tile_73 tile_75 tile_49 tile_51
+//   floor north/south/west/east     tile_74 tile_50 tile_32 tile_35
+//   floor inner NW/NE/SW/SE         tile_20 tile_23 tile_56 tile_59
+//   wall interior                   tile_41
+//   wall outer NW/NE/SW/SE          tile_20 tile_23 tile_56 tile_59
+//   wall north/south/west/east      tile_50 tile_74 tile_35 tile_32
+//   wall inner NW/NE/SW/SE          tile_73 tile_75 tile_49 tile_51
+//   wall pillar top/mid/bottom      tile_15 tile_27 tile_63
+// Each 12x4 rule sets the four sides to This or NotThis. A diagonal is This or
+// NotThis only when both adjacent sides are This; otherwise the corner is Ignore.
 #if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
@@ -1288,8 +1649,19 @@ public static class RuleTileBuilder
 
     private static int DefaultSpriteIndex(SpriteForgeRuleData data)
     {
-        if (IsWang5x8(data)) return 16;
+        if (IsWang5x8(data)) return IsWallFill(data) ? 26 : 16;
+        if (IsGodot12x8(data)) return IsWallFill(data) ? 41 : 34;
         return data.defaultSpriteIndex;
+    }
+
+    private static bool IsWallFill(SpriteForgeRuleData data)
+    {
+        return data != null && data.fillMode == "wall";
+    }
+
+    private static bool IsGodot12x8(SpriteForgeRuleData data)
+    {
+        return data != null && data.preset == "godot-47" && data.columns == 12 && data.rows >= 8;
     }
 
     private static bool IsWang5x8Black(int index)
@@ -1298,8 +1670,33 @@ public static class RuleTileBuilder
             || index == 36 || index == 37 || index == 38 || index == 39;
     }
 
-    private static int BindWang5x8Index(string name)
+    private static int BindWang5x8Index(string name, bool wall)
     {
+        if (wall)
+        {
+            switch (name)
+            {
+                case "floor": return 26;
+                case "north": return 21;
+                case "south": return 11;
+                case "west": return 17;
+                case "east": return 15;
+                case "outer_nw": return 24;
+                case "outer_ne": return 23;
+                case "outer_sw": return 29;
+                case "outer_se": return 28;
+                case "inner_nw": return 10;
+                case "inner_ne": return 12;
+                case "inner_sw": return 20;
+                case "inner_se": return 22;
+                case "single": return 6;
+                case "corridor_ns": return 6;
+                case "corridor_ns_top": return 6;
+                case "corridor_ns_bottom": return 6;
+                default: return -1;
+            }
+        }
+
         switch (name)
         {
             case "floor": return 16;
@@ -1323,6 +1720,59 @@ public static class RuleTileBuilder
         }
     }
 
+    private static int BindGodot12x8Index(string name, bool wall)
+    {
+        if (wall)
+        {
+            switch (name)
+            {
+                case "floor": return 41;
+                case "single": return 63;
+                case "pillar_top": return 15;
+                case "pillar_mid": return 27;
+                case "pillar_bottom": return 63;
+                case "outer_nw": return 20;
+                case "outer_ne": return 23;
+                case "outer_sw": return 56;
+                case "outer_se": return 59;
+                case "north": return 50;
+                case "south": return 74;
+                case "west": return 35;
+                case "east": return 32;
+                case "inner_nw": return 73;
+                case "inner_ne": return 75;
+                case "inner_sw": return 49;
+                case "inner_se": return 51;
+                default: return -1;
+            }
+        }
+
+        switch (name)
+        {
+            case "floor": return 34;
+            case "single": return 72;
+            case "corridor_h": return 2;
+            case "corridor_h_left": return 1;
+            case "corridor_h_right": return 3;
+            case "corridor_v": return 24;
+            case "corridor_v_top": return 12;
+            case "corridor_v_bottom": return 48;
+            case "outer_nw": return 73;
+            case "outer_ne": return 75;
+            case "outer_sw": return 49;
+            case "outer_se": return 51;
+            case "north": return 74;
+            case "south": return 50;
+            case "west": return 32;
+            case "east": return 35;
+            case "inner_nw": return 20;
+            case "inner_ne": return 23;
+            case "inner_sw": return 56;
+            case "inner_se": return 59;
+            default: return -1;
+        }
+    }
+
     private static RuleTile CreateRuleTile(SpriteForgeRuleData data, Dictionary<string, Sprite> sprites)
     {
         var ruleTile = ScriptableObject.CreateInstance<RuleTile>();
@@ -1340,9 +1790,15 @@ public static class RuleTileBuilder
             var index = entry.index;
             if (IsWang5x8(data))
             {
-                var forced = BindWang5x8Index(entry.name);
+                var forced = BindWang5x8Index(entry.name, IsWallFill(data));
                 if (forced >= 0) index = forced;
                 if (IsWang5x8Black(index)) continue;
+            }
+
+            if (IsGodot12x8(data))
+            {
+                var forcedGodot = BindGodot12x8Index(entry.name, IsWallFill(data));
+                if (forcedGodot >= 0) index = forcedGodot;
             }
 
             var rule = new RuleTile.TilingRule();
@@ -1392,6 +1848,7 @@ public class SpriteForgeRuleData
     public string app;
     public int version;
     public string preset;
+    public string fillMode;
     public int tileSize;
     public int columns;
     public int rows;
