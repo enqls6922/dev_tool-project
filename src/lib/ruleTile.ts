@@ -59,10 +59,10 @@ export type PresetInfo = {
 export const PRESET_INFO: Record<RulePreset, PresetInfo> = {
   "15-tileset": {
     id: "15-tileset",
-    label: "PixelLab 15-tileset (3×5)",
-    columns: 3,
-    rows: 5,
-    hint: "PixelLab 15-tileset (3×5 시트)은 가로 3열·세로 5행, 총 15칸(tile_00–tile_14)입니다. 내부 바닥은 tile_07이고, 외곽 코너는 tile_00·01·09·11, 직선 테두리는 tile_04·10·06·08입니다. tile_02·03·13은 기둥이라 바닥에 쓰지 않습니다.",
+    label: "PixelLab 15-tileset (4×8)",
+    columns: 4,
+    rows: 8,
+    hint: "128×256(32px) 시트는 가로 4열·세로 8행, 총 32칸(tile_00–tile_31)입니다. 내부와 고립 타일은 tile_13, 북쪽 테두리는 tile_09, 남쪽은 tile_17, 서쪽은 tile_12, 동쪽은 tile_23입니다. 3×5와 4×4 시트도 같은 프리셋으로 읽습니다.",
   },
   "godot-47": {
     id: "godot-47",
@@ -80,10 +80,27 @@ export const PRESET_INFO: Record<RulePreset, PresetInfo> = {
   },
 };
 
-export type FifteenShape = "3x5";
+export type FifteenShape = "3x5" | "4x4" | "4x8";
 
 export const FIFTEEN_COLUMNS = 3;
 export const FIFTEEN_ROWS = 5;
+export const FIFTEEN_4X4_COLUMNS = 4;
+export const FIFTEEN_4X4_ROWS = 4;
+export const FIFTEEN_4X8_COLUMNS = 4;
+export const FIFTEEN_4X8_ROWS = 8;
+export const FIFTEEN_4X8_COUNT = FIFTEEN_4X8_COLUMNS * FIFTEEN_4X8_ROWS;
+
+/**
+ * PixelLab native dual-grid roles, row-major on a 4×4 sheet.
+ * Index 12 is empty (mask 0). Index 6 is the full floor (mask 15).
+ * Bits: NW=1, NE=2, SW=4, SE=8.
+ */
+export const NATIVE_16_MASKS = [
+  4, 10, 13, 12,
+  9, 14, 15, 7,
+  2, 3, 11, 5,
+  0, 8, 6, 1,
+] as const;
 
 /**
  * PixelLab 15-tileset, 3 columns × 5 rows, indices 0–14.
@@ -103,6 +120,29 @@ export const FIFTEEN_INDEX = {
   outerSE: 11,
 } as const;
 
+/**
+ * PixelLab 15-tileset packed as 4 columns × 8 rows (128×256 at 32px, indices 0–31).
+ * The bright stone floor sits on rows 2–4. tile_13 is the full center and the
+ * isolated cell. North lips tile_08·09·10 draw the pillar row above them.
+ */
+export const FIFTEEN_4X8_INDEX = {
+  floor: 13,
+  defaultSprite: 13,
+  north: 9,
+  south: 17,
+  west: 12,
+  east: 23,
+  outerNW: 8,
+  outerNE: 10,
+  outerSW: 16,
+  outerSE: 27,
+  innerNW: 5,
+  innerNE: 6,
+  innerSW: 18,
+  innerSE: 22,
+  single: 13,
+} as const;
+
 /** Black pillar cells. Never the interior floor. */
 export const FIFTEEN_PILLAR = [2, 3, 13] as const;
 
@@ -112,15 +152,34 @@ export function isFifteenPillar(index: number): boolean {
   return FIFTEEN_PILLAR_SET.has(index);
 }
 
-export function fifteenRectForIndex(index: number, tileSize: number) {
+export function fifteenShape(columns: number, rows: number): FifteenShape | null {
+  if (columns === FIFTEEN_4X8_COLUMNS && rows >= FIFTEEN_4X8_ROWS) return "4x8";
+  if (columns === FIFTEEN_4X4_COLUMNS && rows >= FIFTEEN_4X4_ROWS) return "4x4";
+  if (columns === FIFTEEN_COLUMNS && rows >= FIFTEEN_ROWS) return "3x5";
+  return null;
+}
+
+export function fifteenColumnsFor(shape: FifteenShape): number {
+  return shape === "3x5" ? FIFTEEN_COLUMNS : FIFTEEN_4X8_COLUMNS;
+}
+
+export function fifteenCellCount(shape: FifteenShape): number {
+  if (shape === "4x8") return FIFTEEN_4X8_COUNT;
+  if (shape === "4x4") return FIFTEEN_4X4_COLUMNS * FIFTEEN_4X4_ROWS;
+  return FIFTEEN_COLUMNS * FIFTEEN_ROWS;
+}
+
+export function fifteenRectForIndex(index: number, tileSize: number, shape: FifteenShape = "3x5") {
   if (!Number.isInteger(tileSize) || tileSize <= 0) {
     throw new Error("타일 크기는 양의 정수여야 합니다.");
   }
-  if (!Number.isInteger(index) || index < 0 || index >= FIFTEEN_COLUMNS * FIFTEEN_ROWS) {
-    throw new Error("PixelLab 15-tileset은 tile_00부터 tile_14까지입니다.");
+  const count = fifteenCellCount(shape);
+  if (!Number.isInteger(index) || index < 0 || index >= count) {
+    throw new Error(`PixelLab 15-tileset ${shape} 시트에 없는 칸입니다.`);
   }
-  const column = index % FIFTEEN_COLUMNS;
-  const row = Math.floor(index / FIFTEEN_COLUMNS);
+  const columns = fifteenColumnsFor(shape);
+  const column = index % columns;
+  const row = Math.floor(index / columns);
   return {
     index,
     x: column * tileSize,
@@ -325,10 +384,14 @@ export const GODOT_FULL_MASK = 255;
 /**
  * PixelLab Godot 12×8 floor mode. Painted = 1, empty = 2.
  * The bright room sits on tile_34 (row 2, column 10).
- * Straight edges: west tile_33, east tile_47, north tile_22, south tile_58.
- * tile_47 is the straight right lip. tile_27 is a black pillar cap and tile_35 is
- * an L corner, so neither is the east wall.
- * Outer corners, checked before straight edges: tile_21, tile_23, tile_57, tile_59.
+ * Blue rune borders, from the 12×8 preview:
+ * west tile_32, east tile_11, north tile_05, south tile_02.
+ * tile_03 is the southeast corner, so the straight east wall is tile_11
+ * (the first hole-free right rune). tile_47 is a black hole and tile_27 is a
+ * lip, so neither is the east wall. tile_21, tile_22, tile_33, and tile_58 are
+ * dark outer stone and are not the bright border.
+ * Outer corners, checked before straight edges: tile_04, tile_06, tile_01, tile_03.
+ * The empty cell above a north lip (tile_04, tile_05, tile_06) draws tile_85, tile_86, tile_87.
  */
 export const GODOT_FLOOR_INDEX = {
   floor: 34,
@@ -339,14 +402,14 @@ export const GODOT_FLOOR_INDEX = {
   corridorV: 24,
   corridorVTop: 12,
   corridorVBottom: 48,
-  outerNW: 21,
-  outerNE: 23,
-  outerSW: 57,
-  outerSE: 59,
-  north: 22,
-  south: 58,
-  west: 33,
-  east: 47,
+  outerNW: 4,
+  outerNE: 6,
+  outerSW: 1,
+  outerSE: 3,
+  north: 5,
+  south: 2,
+  west: 32,
+  east: 11,
   innerNW: 44,
   innerNE: 47,
   innerSW: 20,
@@ -387,11 +450,21 @@ export const WANG_FLOOR_OVERLAYS: readonly SpriteOverlay[] = [
   { source: 12, tile: 7, dy: -1 },
 ];
 
-/** 3D wall faces drawn only on the empty cell above a floor-mode north lip (21, 22, 23). */
+/** 3D wall faces drawn only on the empty cell above a floor-mode north lip (04, 05, 06). */
 export const GODOT_FLOOR_OVERLAYS: readonly SpriteOverlay[] = [
-  { source: 21, tile: 85, dy: -1 },
-  { source: 22, tile: 86, dy: -1 },
-  { source: 23, tile: 87, dy: -1 },
+  { source: 4, tile: 85, dy: -1 },
+  { source: 5, tile: 86, dy: -1 },
+  { source: 6, tile: 87, dy: -1 },
+];
+
+/**
+ * 3D black pillars on the empty cell above a 4×8 north lip.
+ * tile_08 → tile_04, tile_09 → tile_05, tile_10 → tile_06 (the cell at y-1).
+ */
+export const FIFTEEN_4X8_OVERLAYS: readonly SpriteOverlay[] = [
+  { source: 8, tile: 4, dy: -1 },
+  { source: 9, tile: 5, dy: -1 },
+  { source: 10, tile: 6, dy: -1 },
 ];
 
 /** Pillar feet drawn on the empty cell below a wall-mode south lip. */
@@ -519,6 +592,8 @@ export function neighborsFromBlobMask(mask: number): Neighbors {
 }
 
 const PRESET_SHAPES: readonly { preset: RulePreset; columns: number; rows: number }[] = [
+  { preset: "15-tileset", columns: 4, rows: 8 },
+  { preset: "15-tileset", columns: 4, rows: 4 },
   { preset: "15-tileset", columns: 3, rows: 5 },
   { preset: "godot-47", columns: 12, rows: 8 },
   { preset: "godot-47", columns: 12, rows: 4 },
@@ -846,6 +921,63 @@ function fifteenSlots(): Slot[] {
   ];
 }
 
+/**
+ * 4×8 rules in check order. Outer corners, then straight edges, then one inner
+ * gap, then the full floor. tile_13 is both the isolated cell and the interior.
+ * The cell label prefers the floor because it is the default sprite.
+ */
+function fifteen4x8Slots(): Slot[] {
+  const index = FIFTEEN_4X8_INDEX;
+  const floor = neighborsFromCornerMask(15);
+  return [
+    wangFixedSlot(index.single, "single", "고립 단독", 0, cardinals({
+      Top: 2, Bottom: 2, Left: 2, Right: 2,
+    })),
+    wangFixedSlot(index.outerNW, "outer_nw", "북서 외곽 코너", 6, cardinals({
+      Top: 2, Left: 2, Right: 1, Bottom: 1,
+    })),
+    wangFixedSlot(index.outerNE, "outer_ne", "북동 외곽 코너", 12, cardinals({
+      Top: 2, Right: 2, Left: 1, Bottom: 1,
+    })),
+    wangFixedSlot(index.outerSW, "outer_sw", "남서 외곽 코너", 3, cardinals({
+      Bottom: 2, Left: 2, Right: 1, Top: 1,
+    })),
+    wangFixedSlot(index.outerSE, "outer_se", "남동 외곽 코너", 9, cardinals({
+      Bottom: 2, Right: 2, Left: 1, Top: 1,
+    })),
+    wangFixedSlot(index.north, "north", "북쪽 상단 테두리", 14, cardinals({
+      Top: 2, Bottom: 1, Left: 1, Right: 1,
+    })),
+    wangFixedSlot(index.south, "south", "남쪽 하단 테두리", 11, cardinals({
+      Bottom: 2, Top: 1, Left: 1, Right: 1,
+    })),
+    wangFixedSlot(index.west, "west", "서쪽 좌측 테두리", 7, cardinals({
+      Left: 2, Right: 1, Top: 1, Bottom: 1,
+    })),
+    wangFixedSlot(index.east, "east", "동쪽 우측 테두리", 13, cardinals({
+      Right: 2, Left: 1, Top: 1, Bottom: 1,
+    })),
+    wangFixedSlot(index.innerNW, "inner_nw", "북서 안쪽 코너", 15, wangInner("TopLeft")),
+    wangFixedSlot(index.innerNE, "inner_ne", "북동 안쪽 코너", 15, wangInner("TopRight")),
+    wangFixedSlot(index.innerSW, "inner_sw", "남서 안쪽 코너", 15, wangInner("BottomLeft")),
+    wangFixedSlot(index.innerSE, "inner_se", "남동 안쪽 코너", 15, wangInner("BottomRight")),
+    wangFixedSlot(index.floor, "floor", "내부 바닥", 15, floor, true),
+  ];
+}
+
+/** 4×4 native mask sheet. Index 12 is the empty default. Specific masks sort first. */
+function fifteenMaskSlots(): Slot[] {
+  return NATIVE_16_MASKS.map((mask, index) => ({
+    index,
+    mask,
+    name: cornerName(mask),
+    label: cornerLabel(mask),
+    neighbors: neighborsFromCornerMask(mask),
+    rule: mask !== 0,
+    fallback: mask === 0,
+  }));
+}
+
 function godotSlots(): Slot[] {
   const seen = new Set<number>();
   const slots: Slot[] = [];
@@ -867,11 +999,13 @@ function godotSlots(): Slot[] {
   return slots;
 }
 
-function slotsForPreset(preset: RulePreset): Slot[] {
+function slotsForPreset(preset: RulePreset, shape: FifteenShape = "3x5"): Slot[] {
   if (preset === "godot-47") return godotSlots();
   if (preset === "wang") {
     throw new Error("Wang 슬롯은 시트 높이에 따라 wangSlots로 만듭니다.");
   }
+  if (shape === "4x8") return fifteen4x8Slots();
+  if (shape === "4x4") return fifteenMaskSlots();
   return fifteenSlots();
 }
 
@@ -1197,17 +1331,30 @@ function guardWang5x8Sprite(
   return { index, mask };
 }
 
-/** First matching 3×5 sprite. A miss, and any pillar index, uses tile_07. */
-export function fifteenFixedResolve(actual: Neighbors): { index: number; mask: number } {
-  const rules = orderedRules(fifteenSlots(), true);
+/**
+ * First matching 15-tileset sprite.
+ * 4×8 and 3×5 keep their fixed tables. A 3×5 miss, and any pillar index, uses tile_07.
+ * A 4×8 miss uses tile_13. A 4×4 miss uses the native empty cell.
+ */
+export function fifteenFixedResolve(actual: Neighbors, shape: FifteenShape = "3x5"): { index: number; mask: number } {
+  if (shape === "4x4") {
+    const rules = orderedRules(fifteenMaskSlots(), false);
+    for (const rule of rules) {
+      if (!ruleMatches(rule.neighbors, actual)) continue;
+      return { index: rule.index, mask: rule.mask };
+    }
+    return { index: NATIVE_16_MASKS.indexOf(0), mask: 0 };
+  }
+  const floor = shape === "4x8" ? FIFTEEN_4X8_INDEX.floor : FIFTEEN_INDEX.floor;
+  const rules = orderedRules(shape === "4x8" ? fifteen4x8Slots() : fifteenSlots(), true);
   for (const rule of rules) {
     if (!ruleMatches(rule.neighbors, actual)) continue;
-    if (isFifteenPillar(rule.index) || rule.index >= FIFTEEN_COLUMNS * FIFTEEN_ROWS) {
-      return { index: FIFTEEN_INDEX.floor, mask: 15 };
+    if (shape === "3x5" && (isFifteenPillar(rule.index) || rule.index >= FIFTEEN_COLUMNS * FIFTEEN_ROWS)) {
+      return { index: floor, mask: 15 };
     }
     return { index: rule.index, mask: rule.mask };
   }
-  return { index: FIFTEEN_INDEX.floor, mask: 15 };
+  return { index: floor, mask: 15 };
 }
 
 /** First matching 12×8 Godot sprite. A miss uses the mode's interior tile. */
@@ -1223,6 +1370,20 @@ export function godotFixedResolve(actual: Neighbors, fillMode: FillMode = "floor
 
 function cloneNeighbors(neighbors: Neighbors): Neighbors {
   return { ...neighbors };
+}
+
+/** Sheet-cell label when two rules share an index. Borders beat corridors. The default sprite wins. */
+function slotLabelRank(slot: Slot): number {
+  if (slot.fallback) return 3;
+  if (
+    slot.name === "north"
+    || slot.name === "south"
+    || slot.name === "west"
+    || slot.name === "east"
+    || slot.name.startsWith("outer_")
+    || slot.name.startsWith("inner_")
+  ) return 2;
+  return 1;
 }
 
 export function analyzeSheet(input: {
@@ -1253,9 +1414,11 @@ export function analyzeSheet(input: {
   let columns = baseColumns;
   let rows = baseRows;
   let mappedRows = preset.rows;
+  let fifteen: FifteenShape | null = null;
 
   if (input.preset === "15-tileset") {
-    if (baseColumns !== FIFTEEN_COLUMNS || baseRows < FIFTEEN_ROWS) {
+    const found = fifteenShape(baseColumns, baseRows);
+    if (!found) {
       const cells = sliceSheet(input.width, input.height, input.tileSize);
       return {
         columns: baseColumns,
@@ -1263,10 +1426,11 @@ export function analyzeSheet(input: {
         cells,
         data: null,
         warning: null,
-        error: `PixelLab 15-tileset은 3×5(15칸)입니다. 이 시트는 ${baseColumns}×${baseRows}칸입니다.`,
+        error: `PixelLab 15-tileset은 4×8(32칸), 4×4, 또는 3×5입니다. 이 시트는 ${baseColumns}×${baseRows}칸입니다.`,
       };
     }
-    mappedRows = FIFTEEN_ROWS;
+    fifteen = found;
+    mappedRows = found === "4x8" ? FIFTEEN_4X8_ROWS : found === "4x4" ? FIFTEEN_4X4_ROWS : FIFTEEN_ROWS;
   } else if (input.preset === "godot-47") {
     const fullSheet = baseColumns === GODOT_COLUMNS && baseRows >= GODOT_FULL_ROWS;
     const doubledSheet = !fullSheet
@@ -1326,10 +1490,11 @@ export function analyzeSheet(input: {
     ? wangSlots(tallWang, fillMode)
     : fullGodot
       ? godotFixedSlots(fillMode)
-      : slotsForPreset(input.preset);
+      : slotsForPreset(input.preset, fifteen ?? "3x5");
   const slotByIndex = new Map<number, Slot>();
   for (const slot of slots) {
-    if (!slotByIndex.has(slot.index)) slotByIndex.set(slot.index, slot);
+    const existing = slotByIndex.get(slot.index);
+    if (!existing || slotLabelRank(slot) > slotLabelRank(existing)) slotByIndex.set(slot.index, slot);
   }
   const fallback = slots.find((slot) => slot.fallback);
   if (!fallback) {
@@ -1364,7 +1529,7 @@ export function analyzeSheet(input: {
     };
   });
 
-  const rules = orderedRules(slots, tallWang || fullGodot || input.preset === "15-tileset");
+  const rules = orderedRules(slots, tallWang || fullGodot || fifteen === "3x5" || fifteen === "4x8");
 
   const warning = rows > mappedRows
     ? `세로가 ${rows}칸입니다. 위쪽 ${mappedRows}줄만 룰에 넣습니다.`
@@ -1410,14 +1575,18 @@ export function buildRuleTileScript(): string {
 // 3. straight edges (all four cardinals specified)
 // 4. one inner diagonal gap
 // 5. full interior. Anything else uses the default sprite.
-// 15-tileset rules are a fixed 3x5 table, first match wins:
-// outer corners, then straight edges, then the full interior tile_07.
-// Anything else, including an isolated cell, uses that same default sprite.
-// PixelLab 15-tileset is 3 columns by 5 rows (indices 0-14). A 4x4 sheet is rejected.
-//   interior / default              tile_07
-//   north / south / west / east     tile_04, tile_10, tile_06, tile_08
-//   outer NW / NE / SW / SE         tile_00, tile_01, tile_09, tile_11
-//   pillars, never a floor rule     tile_02 tile_03 tile_13
+// 15-tileset rules are a fixed table, first match wins.
+// A 4x8 sheet is 4 columns by 8 rows (indices 0-31), the 128x256 PixelLab file.
+// A 3x5 sheet is 3 columns by 5 rows (indices 0-14). A 4x4 sheet uses the native 16 masks.
+//   4x8 interior / default / single tile_13
+//   4x8 north / south / west / east tile_09, tile_17, tile_12, tile_23
+//   4x8 outer NW / NE / SW / SE     tile_08, tile_10, tile_16, tile_27
+//   4x8 inner NW / NE / SW / SE     tile_05, tile_06, tile_18, tile_22
+//   4x8 north-wall overlay          tile_04 tile_05 tile_06 above tile_08 tile_09 tile_10
+//   3x5 interior / default          tile_07
+//   3x5 north / south / west / east tile_04, tile_10, tile_06, tile_08
+//   3x5 outer NW / NE / SW / SE     tile_00, tile_01, tile_09, tile_11
+//   3x5 pillars, never a floor rule tile_02 tile_03 tile_13
 // Wang sheets are 5 columns of square cells. On a 5x4 sheet the index is the mask
 // (NW + 2*NE + 4*SW + 8*SE), so tile 15 is the floor and tile 0 is the default.
 // RuleData.json fillMode is "floor" or "wall". The builder rebinds rule names
@@ -1443,12 +1612,13 @@ export function buildRuleTileScript(): string {
 //   floor interior                  tile_34
 //   floor single                    tile_72
 //   floor corridors                 tile_02 tile_01 tile_03 tile_24 tile_12 tile_48
-//   floor outer NW/NE/SW/SE         tile_21 tile_23 tile_57 tile_59
-//   floor north/south/west/east     tile_22 tile_58 tile_33 tile_47
+//   floor outer NW/NE/SW/SE         tile_04 tile_06 tile_01 tile_03
+//   floor north/south/west/east     tile_05 tile_02 tile_32 tile_11
 //   floor inner NW/NE/SW/SE         tile_44 tile_47 tile_20 tile_23
-//   floor north-wall overlay        tile_85 tile_86 tile_87 above tile_21 tile_22 tile_23
-//   tile_27 is a black pillar cap and tile_35 is an L corner. Floor mode does not
-//   use either as the east wall.
+//   floor north-wall overlay        tile_85 tile_86 tile_87 above tile_04 tile_05 tile_06
+//   tile_03 is the southeast corner, so the straight east wall is tile_11.
+//   tile_47 is a black hole and tile_27 is a lip. Floor mode does not use either
+//   as the east wall. tile_21 tile_22 tile_33 tile_58 are dark outer stone.
 //   wall interior                   tile_41
 //   wall outer NW/NE/SW/SE          tile_20 tile_23 tile_56 tile_59
 //   wall north/south/west/east      tile_50 tile_74 tile_35 tile_32
@@ -1779,14 +1949,14 @@ public static class RuleTileBuilder
             case "corridor_v": return 24;
             case "corridor_v_top": return 12;
             case "corridor_v_bottom": return 48;
-            case "outer_nw": return 21;
-            case "outer_ne": return 23;
-            case "outer_sw": return 57;
-            case "outer_se": return 59;
-            case "north": return 22;
-            case "south": return 58;
-            case "west": return 33;
-            case "east": return 47;
+            case "outer_nw": return 4;
+            case "outer_ne": return 6;
+            case "outer_sw": return 1;
+            case "outer_se": return 3;
+            case "north": return 5;
+            case "south": return 2;
+            case "west": return 32;
+            case "east": return 11;
             case "inner_nw": return 44;
             case "inner_ne": return 47;
             case "inner_sw": return 20;

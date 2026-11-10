@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  FIFTEEN_4X8_INDEX,
   FIFTEEN_INDEX,
   WANG_5X8_BORDER,
   WANG_5X8_INDEX,
@@ -52,6 +53,40 @@ test("a 3x5 rectangle uses the bright floor and never a pillar", () => {
     rect && { index: rect.index, x: rect.x, y: rect.y, width: rect.width, height: rect.height },
     { index: 7, x: 32, y: 64, width: 32, height: 32 },
   );
+});
+
+test("a 4x8 rectangle uses the bright center and the blue-rune border", () => {
+  const layout = { kind: "fifteen" as const, shape: "4x8" as const };
+  const block = fillRect(emptySandbox(), 2, 2, 5, 4);
+  const at = (x: number, y: number) => sandboxTileIndex(block, x, y, 8, layout);
+  assert.equal(at(3, 3), FIFTEEN_4X8_INDEX.floor);
+  assert.equal(at(4, 3), 13);
+  assert.equal(at(3, 2), FIFTEEN_4X8_INDEX.north);
+  assert.equal(at(4, 2), 9);
+  assert.equal(at(5, 2), FIFTEEN_4X8_INDEX.outerNE);
+  assert.equal(at(2, 2), 8);
+  assert.equal(at(2, 3), 12);
+  assert.equal(at(5, 3), 23);
+  assert.equal(at(2, 4), 16);
+  assert.equal(at(3, 4), 17);
+  assert.equal(at(5, 4), 27);
+  const notch = paintCell(block, 4, 2, 0);
+  assert.equal(sandboxTileIndex(notch, 3, 3, 8, layout), FIFTEEN_4X8_INDEX.innerNE);
+  assert.equal(sandboxTileIndex(notch, 4, 3, 8, layout), FIFTEEN_4X8_INDEX.north);
+  assert.equal(sandboxPillarOverlayIndex(block, 2, 1, 8, layout), 4);
+  assert.equal(sandboxPillarOverlayIndex(block, 3, 1, 8, layout), 5);
+  assert.equal(sandboxPillarOverlayIndex(block, 4, 1, 8, layout), 5);
+  assert.equal(sandboxPillarOverlayIndex(block, 5, 1, 8, layout), 6);
+  assert.equal(sandboxPillarOverlayIndex(block, 3, 2, 8, layout), null);
+  const cap = sandboxPillarOverlayRect(block, 3, 1, 32, 8, layout);
+  assert.deepEqual(cap, { index: 5, x: 32, y: 32, width: 32, height: 32 });
+  const floor = sandboxSourceRect(block, 3, 3, 32, 8, layout);
+  assert.deepEqual(
+    floor && { index: floor.index, x: floor.x, y: floor.y, width: floor.width, height: floor.height },
+    { index: 13, x: 32, y: 96, width: 32, height: 32 },
+  );
+  const alone = sandboxTileIndex(fillRect(emptySandbox(), 1, 1, 1, 1), 1, 1, 8, layout);
+  assert.equal(alone, 13);
 });
 
 test("painting a cell refreshes that cell and its eight neighbors", () => {
@@ -249,16 +284,18 @@ test("fill mode swaps the Wang and Godot sandbox sprites", () => {
   const wallGodot = { kind: "godot" as const, tall: true, fillMode: "wall" as const };
   const room = fillRect(emptySandbox(), 2, 2, 4, 4);
   assert.equal(sandboxTileIndex(room, 3, 3, 8, floorGodot), 34);
-  assert.equal(sandboxTileIndex(room, 2, 2, 8, floorGodot), 21);
-  assert.equal(sandboxTileIndex(room, 3, 2, 8, floorGodot), 22);
-  assert.equal(sandboxTileIndex(room, 4, 2, 8, floorGodot), 23);
-  assert.equal(sandboxTileIndex(room, 2, 4, 8, floorGodot), 57);
-  assert.equal(sandboxTileIndex(room, 3, 4, 8, floorGodot), 58);
-  assert.equal(sandboxTileIndex(room, 4, 4, 8, floorGodot), 59);
-  assert.equal(sandboxTileIndex(room, 2, 3, 8, floorGodot), 33);
-  assert.equal(sandboxTileIndex(room, 4, 3, 8, floorGodot), 47);
+  assert.equal(sandboxTileIndex(room, 2, 2, 8, floorGodot), 4);
+  assert.equal(sandboxTileIndex(room, 3, 2, 8, floorGodot), 5);
+  assert.equal(sandboxTileIndex(room, 4, 2, 8, floorGodot), 6);
+  assert.equal(sandboxTileIndex(room, 2, 4, 8, floorGodot), 1);
+  assert.equal(sandboxTileIndex(room, 3, 4, 8, floorGodot), 2);
+  assert.equal(sandboxTileIndex(room, 4, 4, 8, floorGodot), 3);
+  assert.equal(sandboxTileIndex(room, 2, 3, 8, floorGodot), 32);
+  assert.equal(sandboxTileIndex(room, 4, 3, 8, floorGodot), 11);
+  assert.notEqual(sandboxTileIndex(room, 4, 3, 8, floorGodot), 3);
   assert.notEqual(sandboxTileIndex(room, 4, 3, 8, floorGodot), 27);
   assert.notEqual(sandboxTileIndex(room, 4, 3, 8, floorGodot), 35);
+  assert.notEqual(sandboxTileIndex(room, 4, 3, 8, floorGodot), 47);
   assert.equal(sandboxPillarOverlayIndex(room, 2, 1, 8, floorGodot), 85);
   assert.equal(sandboxPillarOverlayIndex(room, 3, 1, 8, floorGodot), 86);
   assert.equal(sandboxPillarOverlayIndex(room, 4, 1, 8, floorGodot), 87);

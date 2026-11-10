@@ -1,4 +1,5 @@
 import {
+  FIFTEEN_4X8_OVERLAYS,
   fifteenFixedResolve,
   fifteenRectForIndex,
   godotFixedResolve,
@@ -131,14 +132,16 @@ export function sandboxPillarOverlayIndex(
   size = SANDBOX_SIZE,
   layout: SandboxLayout = FIFTEEN_LAYOUT,
 ): number | null {
-  if (layout.kind === "fifteen") return null;
+  if (layout.kind === "fifteen" && layout.shape !== "4x8") return null;
   if (x < 0 || y < 0 || x >= size || y >= size) return null;
   if (cells[y * size + x] === 1) return null;
-  const overlays = terrainOverlays(
-    layout.kind,
-    layoutFillMode(layout),
-    layoutTall(layout),
-  );
+  const overlays = layout.kind === "fifteen"
+    ? FIFTEEN_4X8_OVERLAYS
+    : terrainOverlays(
+      layout.kind,
+      layoutFillMode(layout),
+      layoutTall(layout),
+    );
   for (const overlay of overlays) {
     const sourceY = y - overlay.dy;
     if (sourceY < 0 || sourceY >= size) continue;
@@ -158,6 +161,7 @@ export function sandboxPillarOverlayRect(
 ) {
   const index = sandboxPillarOverlayIndex(cells, x, y, size, layout);
   if (index === null) return null;
+  if (layout.kind === "fifteen") return fifteenRectForIndex(index, tileSize, "4x8");
   if (layout.kind === "godot" && layout.tall) return godotRectForIndex(index, tileSize);
   return wangRectForIndex(index, tileSize);
 }
@@ -176,7 +180,7 @@ export function sandboxTileIndex(
     return wangResolve(cellNeighbors(cells, x, y, size), layout.tall, layoutFillMode(layout)).index;
   }
   if (layout.kind === "fifteen") {
-    return fifteenFixedResolve(cellNeighbors(cells, x, y, size)).index;
+    return fifteenFixedResolve(cellNeighbors(cells, x, y, size), layout.shape).index;
   }
   if (layout.kind === "godot" && layout.tall) {
     return godotFixedResolve(cellNeighbors(cells, x, y, size), layoutFillMode(layout)).index;
@@ -199,8 +203,8 @@ export function sandboxSourceRect(
     return { ...wangRectForIndex(resolved.index, tileSize), mask: resolved.mask };
   }
   if (layout.kind === "fifteen") {
-    const resolved = fifteenFixedResolve(cellNeighbors(cells, x, y, size));
-    return { ...fifteenRectForIndex(resolved.index, tileSize), mask: resolved.mask };
+    const resolved = fifteenFixedResolve(cellNeighbors(cells, x, y, size), layout.shape);
+    return { ...fifteenRectForIndex(resolved.index, tileSize, layout.shape), mask: resolved.mask };
   }
   if (layout.kind === "godot" && layout.tall) {
     const resolved = godotFixedResolve(cellNeighbors(cells, x, y, size), layoutFillMode(layout));
