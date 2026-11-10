@@ -62,22 +62,27 @@ test("a 4x8 rectangle uses the bright center and the blue-rune border", () => {
   assert.equal(at(3, 3), FIFTEEN_4X8_INDEX.floor);
   assert.equal(at(4, 3), 14);
   assert.equal(at(3, 2), FIFTEEN_4X8_INDEX.north);
-  assert.equal(at(4, 2), 18);
+  assert.equal(at(4, 2), 10);
   assert.equal(at(5, 2), FIFTEEN_4X8_INDEX.outerNE);
-  assert.equal(at(2, 2), 4);
+  assert.equal(at(2, 2), 12);
   assert.equal(at(2, 3), 12);
-  assert.equal(at(5, 3), 23);
+  assert.equal(at(5, 3), 1);
   assert.equal(at(2, 4), 16);
   assert.equal(at(3, 4), 17);
-  assert.equal(at(5, 4), 27);
+  assert.equal(at(5, 4), 17);
   assert.notEqual(at(3, 3), 13);
+  assert.notEqual(at(3, 2), 18);
   const notch = paintCell(block, 4, 2, 0);
-  assert.equal(sandboxTileIndex(notch, 3, 3, 8, layout), FIFTEEN_4X8_INDEX.innerNE);
+  assert.equal(sandboxTileIndex(notch, 3, 3, 8, layout), FIFTEEN_4X8_INDEX.floor);
   assert.equal(sandboxTileIndex(notch, 4, 3, 8, layout), FIFTEEN_4X8_INDEX.north);
-  assert.equal(sandboxPillarOverlayIndex(block, 2, 1, 8, layout), null);
-  assert.equal(sandboxPillarOverlayIndex(block, 3, 1, 8, layout), null);
-  assert.equal(sandboxPillarOverlayIndex(block, 5, 1, 8, layout), null);
-  assert.equal(sandboxPillarOverlayRect(block, 3, 1, 32, 8, layout), null);
+  assert.equal(sandboxPillarOverlayIndex(block, 2, 1, 8, layout), 6);
+  assert.equal(sandboxPillarOverlayIndex(block, 3, 1, 8, layout), 3);
+  assert.equal(sandboxPillarOverlayIndex(block, 4, 1, 8, layout), 3);
+  assert.equal(sandboxPillarOverlayIndex(block, 5, 1, 8, layout), 7);
+  assert.equal(sandboxPillarOverlayIndex(block, 2, 2, 8, layout), null);
+  assert.deepEqual(sandboxPillarOverlayRect(block, 3, 1, 32, 8, layout), {
+    index: 3, x: 96, y: 0, width: 32, height: 32,
+  });
   const floor = sandboxSourceRect(block, 3, 3, 32, 8, layout);
   assert.deepEqual(
     floor && { index: floor.index, x: floor.x, y: floor.y, width: floor.width, height: floor.height },
@@ -282,12 +287,12 @@ test("fill mode swaps the Wang and Godot sandbox sprites", () => {
   const wallGodot = { kind: "godot" as const, tall: true, fillMode: "wall" as const };
   const room = fillRect(emptySandbox(), 2, 2, 4, 4);
   assert.equal(sandboxTileIndex(room, 3, 3, 8, floorGodot), 34);
-  assert.equal(sandboxTileIndex(room, 2, 2, 8, floorGodot), 56);
-  assert.equal(sandboxTileIndex(room, 3, 2, 8, floorGodot), 58);
-  assert.equal(sandboxTileIndex(room, 4, 2, 8, floorGodot), 59);
-  assert.equal(sandboxTileIndex(room, 2, 4, 8, floorGodot), 20);
-  assert.equal(sandboxTileIndex(room, 3, 4, 8, floorGodot), 22);
-  assert.equal(sandboxTileIndex(room, 4, 4, 8, floorGodot), 11);
+  assert.equal(sandboxTileIndex(room, 2, 2, 8, floorGodot), 61);
+  assert.equal(sandboxTileIndex(room, 3, 2, 8, floorGodot), 62);
+  assert.equal(sandboxTileIndex(room, 4, 2, 8, floorGodot), 63);
+  assert.equal(sandboxTileIndex(room, 2, 4, 8, floorGodot), 85);
+  assert.equal(sandboxTileIndex(room, 3, 4, 8, floorGodot), 86);
+  assert.equal(sandboxTileIndex(room, 4, 4, 8, floorGodot), 87);
   assert.equal(sandboxTileIndex(room, 2, 3, 8, floorGodot), 32);
   assert.equal(sandboxTileIndex(room, 4, 3, 8, floorGodot), 23);
   assert.notEqual(sandboxTileIndex(room, 4, 3, 8, floorGodot), 11);
@@ -295,12 +300,11 @@ test("fill mode swaps the Wang and Godot sandbox sprites", () => {
   assert.notEqual(sandboxTileIndex(room, 4, 3, 8, floorGodot), 27);
   assert.notEqual(sandboxTileIndex(room, 4, 3, 8, floorGodot), 35);
   assert.notEqual(sandboxTileIndex(room, 4, 3, 8, floorGodot), 47);
-  assert.equal(sandboxPillarOverlayIndex(room, 2, 1, 8, floorGodot), 85);
-  assert.equal(sandboxPillarOverlayIndex(room, 3, 1, 8, floorGodot), 86);
-  assert.equal(sandboxPillarOverlayIndex(room, 4, 1, 8, floorGodot), 87);
+  assert.equal(sandboxPillarOverlayIndex(room, 2, 1, 8, floorGodot), null);
+  assert.equal(sandboxPillarOverlayIndex(room, 3, 1, 8, floorGodot), null);
+  assert.equal(sandboxPillarOverlayIndex(room, 4, 1, 8, floorGodot), null);
   assert.equal(sandboxPillarOverlayIndex(room, 3, 2, 8, floorGodot), null);
-  const cap = sandboxPillarOverlayRect(room, 3, 1, 32, 8, floorGodot);
-  assert.deepEqual(cap, { index: 86, x: 2 * 32, y: 7 * 32, width: 32, height: 32 });
+  assert.equal(sandboxPillarOverlayRect(room, 3, 1, 32, 8, floorGodot), null);
   const notch = paintCell(fillRect(emptySandbox(), 0, 0, 2, 2), 0, 0, 0);
   assert.equal(sandboxTileIndex(notch, 1, 1, 8, floorGodot), 44);
 
