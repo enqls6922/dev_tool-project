@@ -80,7 +80,7 @@ export function cellsTouchedByEdit(
   return coords;
 }
 
-/** This/NotThis for the eight cells around a painted cell. Outside the grid is NotThis. */
+/** This/NotThis around a painted cell. Outside the grid is NotThis. Up2/Up3/Down2 feed the Godot wall stack. */
 export function cellNeighbors(
   cells: readonly number[],
   x: number,
@@ -102,6 +102,9 @@ export function cellNeighbors(
     TopRight: at(1, -1),
     BottomLeft: at(-1, 1),
     BottomRight: at(1, 1),
+    Up2: at(0, -2),
+    Up3: at(0, -3),
+    Down2: at(0, 2),
   };
 }
 
